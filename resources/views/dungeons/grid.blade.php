@@ -39,6 +39,7 @@
                                 'bg-yellow-600 text-white flex items-center justify-center cursor-pointer': '{{ $cell }}' === 'D', /* Door */
                                 'bg-white text-black flex items-center justify-center': '{{ $cell }}' === 'E', /* Exit */
                                 'bg-red-600 text-white flex items-center justify-center': '{{ $cell }}' === 'S', /* Start */
+                                'bg-red-800 text-white flex items-center justify-center': '{{ $cell }}' === 'Z', /* Start */
                                 'bg-purple-700 text-white flex items-center justify-center': '{{ $cell }}' === 'B' /* Boss */
                             }"
                             @click="if ('{{ $cell }}' === 'D') explore('{{ $x }}', '{{ $y }}')"
@@ -47,6 +48,7 @@
                             @if($cell === 'E') E @endif
                             @if($cell === 'S') S @endif
                             @if($cell === 'B') B @endif
+                            @if($cell === 'Z') Z @endif
 
                             {{-- Masking Layer --}}
 {{--                            <div--}}
