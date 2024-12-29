@@ -566,81 +566,58 @@ class Dungeon extends Model
 
 
 
+    /**
+     * Add a corridor from a door.
+     */
     private function addCorridorFromDoor(&$grid, $door)
     {
-        $maxLength = rand(5, 10); // Maximum corridor length
-        $turnChance = 0.2; // 20% chance to turn after each step
+        $length = rand(3, 6); // Limit corridor length
+        $direction = $this->getCorridorDirection($door, $grid);
 
-        // Start the path at the tile next to the door
-        $currentX = $door['x'];
-        $currentY = $door['y'];
-
-        // Offset to the next tile based on the door's direction
-        $directions = ['up', 'down', 'left', 'right'];
-        $direction = $this->getCorridorDirection($door, $grid); // Get the corridor direction
-        switch ($direction) {
-            case 'up': $currentY--; break;
-            case 'down': $currentY++; break;
-            case 'left': $currentX--; break;
-            case 'right': $currentX++; break;
+        if (!$direction) {
+            return; // Skip if no valid direction is detected
         }
 
-        // Check if the first tile is legal (not a wall, room, or out of bounds)
-        if (!$this->isInBounds($currentX, $currentY) ||
-            $grid[$currentY][$currentX] === 'W' ||
-            $grid[$currentY][$currentX] === 'R' ||
-            $grid[$currentY][$currentX] === 'C') {
-            // If the first tile is not valid, stop the corridor creation
-            return;
-        }
+        $corridorPath = []; // Track corridor tiles
 
-        // Mark the start of the corridor (next to the door)
-        $grid[$currentY][$currentX] = 'C'; // Mark corridor tile
-        $corridorPath = [['x' => $currentX, 'y' => $currentY]];
-
-        // Continue generating the corridor
-        for ($i = 0; $i < $maxLength; $i++) {
-            // Move in the current direction
+        for ($i = 0; $i < $length; $i++) {
             switch ($direction) {
-                case 'up': $currentY--; break;
-                case 'down': $currentY++; break;
-                case 'left': $currentX--; break;
-                case 'right': $currentX++; break;
+                case 'up': $door['y']--; break;
+                case 'down': $door['y']++; break;
+                case 'left': $door['x']--; break;
+                case 'right': $door['x']++; break;
             }
 
-            // Check if the move is valid (within bounds and not overlapping walls, rooms, or existing corridors)
-            if (!$this->isInBounds($currentX, $currentY) ||
-                $grid[$currentY][$currentX] === 'W' ||  // Wall check
-                $grid[$currentY][$currentX] === 'R' ||  // Room check
-                $grid[$currentY][$currentX] === 'C'     // If the corridor meets another corridor, stop
+            // Validate grid boundaries
+            if (
+                !$this->isInBounds($door['x'], $door['y']) ||
+                isset($grid[$door['y']][$door['x']]) && $grid[$door['y']][$door['x']] !== '#'
             ) {
-                break; // Stop if out of bounds, tile is occupied, or the corridor meets another
+                break; // Stop if out of bounds or tile is occupied
             }
 
-            // Mark the new position as part of the corridor
-            $grid[$currentY][$currentX] = 'C';
-            $corridorPath[] = ['x' => $currentX, 'y' => $currentY];
+            $grid[$door['y']][$door['x']] = 'C'; // Mark as corridor
+            $corridorPath[] = ['x' => $door['x'], 'y' => $door['y']];
+        }
 
-            // Occasionally change direction randomly (20% chance)
-            if (rand(0, 100) / 100 < $turnChance) {
-                // Randomly pick a new direction (excluding the opposite direction)
-                $newDirections = array_diff($directions, [$direction]);
-                $direction = $newDirections[array_rand($newDirections)];
+        // Place a door at the end of the corridor
+        $endX = $door['x'];
+        $endY = $door['y'];
+
+        if (
+            $this->isInBounds($endX, $endY) &&
+            isset($grid[$endY][$endX]) &&
+            $grid[$endY][$endX] === 'C'
+        ) {
+            $grid[$endY][$endX] = 'D'; // End corridor with a door
+
+            // Attempt to add a room from the door
+            if (!$this->addRoomFromDoor($grid, ['x' => $endX, 'y' => $endY], true)) {
+                // Rollback the corridor if no room could be placed
+                $this->rollbackCorridor($grid, $corridorPath);
             }
-        }
-
-        // After the corridor, place a door at the end or continue a room
-        if ($this->isInBounds($currentX, $currentY) && $grid[$currentY][$currentX] === 'C') {
-            $grid[$currentY][$currentX] = 'D'; // End corridor with a door
-        }
-
-        // Attempt to add a room from the end door
-        if (!$this->addRoomFromDoor($grid, ['x' => $currentX, 'y' => $currentY], true)) {
-            // Rollback the corridor if no room could be placed
-            $this->rollbackCorridor($grid, $corridorPath);
         }
     }
-
 
 
     private function isAdjacentToDoor(&$grid, $x, $y)
