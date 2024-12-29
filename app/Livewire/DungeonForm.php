@@ -71,7 +71,7 @@ class DungeonForm extends Component
         session()->flash('success', 'Dungeon created successfully with rooms!');
 
         // Step 5: Redirect to the Dungeon Grid view
-        return redirect()->route('dungeons.grid', ['id' => $dungeon->id]);
+        return redirect()->route('dungeons.show', ['id' => $dungeon->id]);
     }
 
     // Get dimensions based on size

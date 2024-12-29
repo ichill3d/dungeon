@@ -31,20 +31,15 @@ class Dungeon extends Model
         return $this->hasOne(DungeonSetting::class);
     }
 
-    /**
-     * Initialize an empty grid with empty spaces (#).
-     */
     public function initializeGrid()
     {
         return array_fill(0, $this->height, array_fill(0, $this->width, '#'));
     }
 
-    /**
-     * Generate the dungeon with rooms, doors, and corridors.
-     */
     public function generateDungeon()
     {
         $grid = $this->initializeGrid();
+        $rooms = [];
 
         // Step 1: Place the initial room in the center
         $centerX = intdiv($this->width, 2);
@@ -65,20 +60,93 @@ class Dungeon extends Model
             $this->processDoor($grid, $door);
         }
 
-        $this->cleanupDoors($grid);
-
         $this->markExits($grid);
 
         $this->placeStartingLocation($grid);
 
+        $this->cleanupDoors($grid);
+
         $this->placeBossRoom($grid);
+
+        $this->scanAndStoreCorridors($grid);
 
         return $grid;
     }
 
-    /**
-     * Place the starting location for heroes.
-     */
+    public function scanAndStoreCorridors(&$grid)
+    {
+        $corridorsQueue = [];  // Initialize an array to store corridors
+
+        // Track visited tiles to avoid scanning the same tile multiple times
+        $visited = array_fill(0, $this->height, array_fill(0, $this->width, false));
+
+        // Iterate over the entire grid to find and group 'C' tiles
+        for ($y = 0; $y < $this->height; $y++) {
+            for ($x = 0; $x < $this->width; $x++) {
+                // If the tile is part of a corridor ('C') and has not been visited
+                if ($grid[$y][$x] === 'C' && !$visited[$y][$x]) {
+                    logger("Found corridor at ({$x}, {$y}).");
+                    // Start a new corridor and perform BFS or DFS to find all connected 'C' tiles
+                    $corridor = $this->findCorridor($grid, $x, $y, $visited);
+                    // Add the corridor to the queue
+                    $corridorsQueue[] = $corridor;
+                }
+            }
+        }
+
+        // After scanning and grouping all corridors, store them in the database
+        $this->storeAllCorridors($corridorsQueue);
+    }
+
+    public function findCorridor(&$grid, $startX, $startY, &$visited)
+    {
+        $queue = [[$startX, $startY]];  // Initialize the BFS queue with the starting tile
+        $corridor = [];  // Store the coordinates of the corridor cells
+        $visited[$startY][$startX] = true;  // Mark the starting tile as visited
+
+        // Directions for moving to adjacent cells (left, right, up, down)
+        $directions = [
+            [-1, 0], // Left
+            [1, 0],  // Right
+            [0, -1], // Up
+            [0, 1],  // Down
+        ];
+
+        // Perform BFS
+        while (!empty($queue)) {
+            [$x, $y] = array_shift($queue);  // Get the next tile from the queue
+            $corridor[] = ['x' => $x, 'y' => $y];  // Add the tile to the corridor
+
+            // Check all adjacent tiles
+            foreach ($directions as [$dx, $dy]) {
+                $newX = $x + $dx;
+                $newY = $y + $dy;
+
+                // Check if the new tile is within bounds and is a 'C' tile that hasn't been visited yet
+                if ($this->isInBounds($newX, $newY) && !$visited[$newY][$newX] && $grid[$newY][$newX] === 'C') {
+                    $visited[$newY][$newX] = true;  // Mark the tile as visited
+                    $queue[] = [$newX, $newY];  // Add the tile to the queue
+                }
+            }
+        }
+
+        return $corridor;  // Return the list of coordinates for the current corridor
+    }
+
+    public function storeAllCorridors($corridorsQueue)
+    {
+        foreach ($corridorsQueue as $corridor) {
+            // Insert the corridor data into the dungeon_corridors table
+            DungeonCorridor::create([
+                'dungeon_id' => $this->id,  // The dungeon this corridor belongs to
+                'cells' => json_encode($corridor), // Store the corridor cells as JSON
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+    }
+
+
     private function placeStartingLocation(&$grid)
     {
         $exitTiles = [];
@@ -97,7 +165,7 @@ class Dungeon extends Model
         if (!empty($exitTiles)) {
             $start = $exitTiles[array_rand($exitTiles)];
             $grid[$start['y']][$start['x']] = 'S'; // Mark start
-            logger("Starting location placed at Exit: ({$start['x']}, {$start['y']})");
+            //logger("Starting location placed at Exit: ({$start['x']}, {$start['y']})");
             return;
         }
 
@@ -125,12 +193,12 @@ class Dungeon extends Model
         // Step 4: Place start at the best room found
         if ($bestRoom !== null) {
             $grid[$bestRoom['y']][$bestRoom['x']] = 'S'; // Mark start
-            logger("Starting location placed at Edge Room: ({$bestRoom['x']}, {$bestRoom['y']})");
+            //logger("Starting location placed at Edge Room: ({$bestRoom['x']}, {$bestRoom['y']})");
             return;
         }
 
         // Step 5: Fallback (Edge Case)
-        logger("No valid start location found!");
+        //logger("No valid start location found!");
     }
 
 
@@ -186,7 +254,7 @@ class Dungeon extends Model
 
         // Validate start exists
         if (!$start) {
-            logger("No starting point ('S') found. Cannot place boss room.");
+            //logger("No starting point ('S') found. Cannot place boss room.");
             return;
         }
 
@@ -205,9 +273,9 @@ class Dungeon extends Model
         // Step 3: Mark the furthest room as 'B'
         if ($bossRoom) {
             $grid[$bossRoom['y']][$bossRoom['x']] = 'B'; // Mark Boss Room
-            logger("Boss Room placed at ({$bossRoom['x']}, {$bossRoom['y']}) with distance: {$maxDistance}");
+            //logger("Boss Room placed at ({$bossRoom['x']}, {$bossRoom['y']}) with distance: {$maxDistance}");
         } else {
-            logger("No valid room found to place Boss Room.");
+           // logger("No valid room found to place Boss Room.");
         }
     }
 
@@ -225,12 +293,19 @@ class Dungeon extends Model
         for ($y = 0; $y < $this->height; $y++) {
             for ($x = 0; $x < $this->width; $x++) {
                 if ($grid[$y][$x] === 'D') {
-                    logger("Door recoginized at ({$x}, {$y}).");
+                    //logger("Door recoginized at ({$x}, {$y}).");
 
                     if (!$this->isValidDoor($grid, $x, $y)) {
-                        logger("Door invalidated at ({$x}, {$y}).");
+                        //logger("Door invalidated at ({$x}, {$y}).");
                         //$grid[$y][$x] = $this->replaceDoorWith($grid, $x, $y); // Replace invalid door with a wall
                         $grid[$y][$x] = "W"; // Replace invalid door with a wall
+                    } else {
+                        //Door is valid
+                        DungeonDoor::create([
+                            'dungeon_id' => $this->id,   // The ID of the dungeon
+                            'x' => $x,                     // X coordinate of the door
+                            'y' => $y                      // Y coordinate of the door
+                        ]);
                     }
                 }
             }
@@ -385,7 +460,7 @@ class Dungeon extends Model
             ) {
                 $grid[$doorY][$doorX] = 'D'; // Place door
                 $doors[] = ['x' => $doorX, 'y' => $doorY];
-                logger("Door placed at ({$doorX}, {$doorY})");
+               // logger("Door placed at ({$doorX}, {$doorY})");
             }
         }
 
@@ -403,10 +478,10 @@ class Dungeon extends Model
 
         // 50% chance to create either a room or a corridor
         if ($connectionType === 0) {
-            logger("Door connected to a room.");
+           // logger("Door connected to a room.");
             $this->addRoomFromDoor($grid, $door);
         } else {
-            logger("Door connected to a corridor.");
+           // logger("Door connected to a corridor.");
             $this->addCorridorFromDoor($grid, $door);
         }
     }
@@ -472,7 +547,7 @@ class Dungeon extends Model
                 $this->placeRoom($grid, $placementX, $placementY, $roomWidth, $roomHeight, $roomType);
                 $this->placeRoomWalls($grid, $placementX, $placementY, $roomWidth, $roomHeight);
                 $grid[$door['y']][$door['x']] = 'D'; // Set the door to be a valid door
-                logger("Room placed at ({$placementX}, {$placementY})");
+                //logger("Room placed at ({$placementX}, {$placementY})");
 
                 // Add new doors to the room
                 $newDoors = $this->placeDoors($grid, $placementX, $placementY, $roomWidth, $roomHeight);
@@ -489,7 +564,7 @@ class Dungeon extends Model
         }
 
         // If the room could not be placed, return false
-        logger("Failed to place room after reducing size.");
+        //logger("Failed to place room after reducing size.");
         return false;
     }
 
@@ -616,17 +691,17 @@ class Dungeon extends Model
                 if(!$this->addRoomFromDoor($grid, ['x' => $currentX, 'y' => $currentY], true)) {
                     $this->rollbackCorridor($grid, $corridorPath);
                 }
-                logger("Corridor Placed, End Door placed at ({$currentX}, {$currentY})");
+                //logger("Corridor Placed, End Door placed at ({$currentX}, {$currentY})");
             }
 
             // The room has already been added at the end, so no need to add again
-            logger("Room placed successfully at the end of the corridor");
+            //logger("Room placed successfully at the end of the corridor");
 
             return; // Successfully placed the corridor and room, exit the function
         }
 
         // If the loop reaches the max attempts, log that corridor placement failed
-        logger("Failed to place a corridor after {$maxAttempts} attempts.");
+       // logger("Failed to place a corridor after {$maxAttempts} attempts.");
     }
 
 
