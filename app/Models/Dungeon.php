@@ -82,6 +82,7 @@ class Dungeon extends Model
     private function placeStartingLocation(&$grid)
     {
         $exitTiles = [];
+        $edgeRoomTiles = [];
 
         // Step 1: Collect all 'E' tiles (Exits)
         for ($y = 0; $y < $this->height; $y++) {
@@ -101,19 +102,37 @@ class Dungeon extends Model
         }
 
         // Step 3: Search for Edge Rooms ('R') Adjacent to the Actual Grid Edge
+        // Loop over the grid and check the proximity to the edge for rooms
+        $minDistance = PHP_INT_MAX; // Start with an infinitely large distance
+        $bestRoom = null;
+
         for ($y = 1; $y < $this->height - 1; $y++) {
             for ($x = 1; $x < $this->width - 1; $x++) {
-                if ($grid[$y][$x] === 'R' && $this->isAdjacentToPhysicalEdge($x, $y, $grid)) {
-                    $grid[$y][$x] = 'S'; // Mark start
-                    logger("Starting location placed at Edge Room: ({$x}, {$y})");
-                    return;
+                if ($grid[$y][$x] === 'R') {
+                    // Check if it's adjacent to the edge
+                    if ($this->isAdjacentToPhysicalEdge($x, $y, $grid)) {
+                        // Calculate Manhattan distance to the nearest edge
+                        $distance = min($x, $this->width - $x - 1, $y, $this->height - $y - 1);
+                        if ($distance < $minDistance) {
+                            $minDistance = $distance;
+                            $bestRoom = ['x' => $x, 'y' => $y];
+                        }
+                    }
                 }
             }
         }
 
-        // Step 4: Fallback (Edge Case)
+        // Step 4: Place start at the best room found
+        if ($bestRoom !== null) {
+            $grid[$bestRoom['y']][$bestRoom['x']] = 'S'; // Mark start
+            logger("Starting location placed at Edge Room: ({$bestRoom['x']}, {$bestRoom['y']})");
+            return;
+        }
+
+        // Step 5: Fallback (Edge Case)
         logger("No valid start location found!");
     }
+
 
     /**
      * Check if a room tile is adjacent to the actual physical edge of the grid.
@@ -206,8 +225,11 @@ class Dungeon extends Model
         for ($y = 0; $y < $this->height; $y++) {
             for ($x = 0; $x < $this->width; $x++) {
                 if ($grid[$y][$x] === 'D') {
+                    logger("Door recoginized at ({$x}, {$y}).");
+
                     if (!$this->isValidDoor($grid, $x, $y)) {
-                        $grid[$y][$x] = 'W'; // Replace invalid door with a wall
+                        logger("Door invalidated at ({$x}, {$y}).");
+                        $grid[$y][$x] = $this->replaceDoorWith($grid, $x, $y); // Replace invalid door with a wall
                     }
                 }
             }
@@ -241,10 +263,52 @@ class Dungeon extends Model
             ($adjacentTiles[3] === 'R' && $adjacentTiles[2] === 'C');   // Right: Room, Left: Corridor
     }
 
+    private function replaceDoorWith(&$grid, $x, $y)
+    {
+        $adjacentOffsets = [
+            [-1, 0], [1, 0], [0, -1], [0, 1]  // Check top, bottom, left, and right
+        ];
 
-    /**
-     * Place a room on the grid.
-     */
+        $adjacentTiles = [];
+        foreach ($adjacentOffsets as [$dx, $dy]) {
+            $adjX = $x + $dx;
+            $adjY = $y + $dy;
+
+            if ($this->isInBounds($adjX, $adjY)) {
+                $adjacentTiles[] = $grid[$adjY][$adjX];
+            } else {
+                $adjacentTiles[] = null; // Out of bounds
+            }
+        }
+
+        // If the door is surrounded by corridors (C) or between corridors and doors (C-D or D-C)
+        if (
+            ($adjacentTiles[0] === 'C' && $adjacentTiles[1] === 'C') ||  // Top and Bottom: Corridor-Corridor
+            ($adjacentTiles[2] === 'C' && $adjacentTiles[3] === 'C') ||  // Left and Right: Corridor-Corridor
+            ($adjacentTiles[0] === 'C' && $adjacentTiles[1] === 'D') ||  // Top: Corridor, Bottom: Door
+            ($adjacentTiles[1] === 'C' && $adjacentTiles[0] === 'D') ||  // Bottom: Corridor, Top: Door
+            ($adjacentTiles[2] === 'C' && $adjacentTiles[3] === 'D') ||  // Left: Corridor, Right: Door
+            ($adjacentTiles[3] === 'C' && $adjacentTiles[2] === 'D')     // Right: Corridor, Left: Door
+        ) {
+            return 'C'; // Replace door with a corridor
+        }
+
+        // If the door is surrounded by rooms (R) or walls (W), replace it with a wall
+        if (
+            ($adjacentTiles[0] === 'R' && $adjacentTiles[1] === 'R') || // Room-Room (Top and Bottom)
+            ($adjacentTiles[2] === 'R' && $adjacentTiles[3] === 'R') || // Room-Room (Left and Right)
+            ($adjacentTiles[0] === 'R' && $adjacentTiles[1] === 'W') || // Room-Wall (Top: Room, Bottom: Wall)
+            ($adjacentTiles[1] === 'R' && $adjacentTiles[0] === 'W') || // Room-Wall (Bottom: Room, Top: Wall)
+            ($adjacentTiles[2] === 'R' && $adjacentTiles[3] === 'W') || // Room-Wall (Left: Room, Right: Wall)
+            ($adjacentTiles[3] === 'R' && $adjacentTiles[2] === 'W')    // Room-Wall (Right: Room, Left: Wall)
+        ) {
+            return 'W'; // Replace door with a wall
+        }
+
+        // If none of the above conditions match, we return 'W' as a safe default
+        return 'W'; // Default to wall replacement
+    }
+
 
     private function placeRoom(&$grid, $x, $y, $width, $height, $type = 'empty', $name = 'Room', $description = null)
     {
@@ -340,10 +404,6 @@ class Dungeon extends Model
         }
     }
 
-
-    /**
-     * Place doors (1–4) on a room.
-     */
     private function placeDoors(&$grid, $x, $y, $width, $height, $isInitialRoom = false)
     {
         $doorCount = rand(1, 4);
@@ -370,6 +430,7 @@ class Dungeon extends Model
             ) {
                 $grid[$doorY][$doorX] = 'D'; // Place door
                 $doors[] = ['x' => $doorX, 'y' => $doorY];
+                logger("Door placed at ({$doorX}, {$doorY})");
             }
         }
 
@@ -387,8 +448,10 @@ class Dungeon extends Model
 
         // 50% chance to create either a room or a corridor
         if ($connectionType === 0) {
+            logger("Door connected to a room.");
             $this->addRoomFromDoor($grid, $door);
         } else {
+            logger("Door connected to a corridor.");
             $this->addCorridorFromDoor($grid, $door);
         }
     }
@@ -452,7 +515,7 @@ class Dungeon extends Model
                 $this->placeRoom($grid, $placementX, $placementY, $roomWidth, $roomHeight, $roomType);
                 $this->placeRoomWalls($grid, $placementX, $placementY, $roomWidth, $roomHeight);
                 $grid[$door['y']][$door['x']] = 'D';
-
+                logger("Room placed at ({$placementX}, {$placementY})");
                 // Add new doors to the room
                 $newDoors = $this->placeDoors($grid, $placementX, $placementY, $roomWidth, $roomHeight);
                 foreach ($newDoors as $newDoor) {
@@ -485,33 +548,131 @@ class Dungeon extends Model
 
         return 'empty'; // Default to empty
     }
+    private function addCorridorFromDoor(&$grid, $door)
+    {
+        $maxLength = rand(5, 10); // Maximum corridor length
+        $turnChance = 0.2; // 20% chance to turn after each step
+        $maxAttempts = 50;
+
+        $attempts = 0;
+        $exitCorridor = false;
+
+        // Start attempting to place the corridor
+        while ($attempts < $maxAttempts) {
+            // Start the path at the tile next to the door
+            $currentX = $door['x'];
+            $currentY = $door['y'];
+
+            // Offset to the next tile based on the door's direction
+            $directions = ['up', 'down', 'left', 'right'];
+            $direction = $this->getCorridorDirection($door, $grid); // Get the corridor direction
+            switch ($direction) {
+                case 'up': $currentY--; break;
+                case 'down': $currentY++; break;
+                case 'left': $currentX--; break;
+                case 'right': $currentX++; break;
+            }
+            if (!$this->isInBounds($currentX, $currentY)) {
+                logger("Corridor exited and placed exit at ({$currentX}, {$currentY})");
+                return;
+            }
+            // Check if the first tile is legal (not a wall, room)
+            if (
+                $grid[$currentY][$currentX] === 'W' ||
+                $grid[$currentY][$currentX] === 'R'
+            ) {
+                // If the first tile is not valid, stop the corridor creation and retry
+                $attempts++;
+                continue;
+            }
+
+            // Mark the start of the corridor (next to the door)
+            $grid[$currentY][$currentX] = 'C'; // Mark corridor tile
+            $corridorPath = [['x' => $currentX, 'y' => $currentY]];
+
+
+            // Continue generating the corridor
+            for ($i = 0; $i < $maxLength; $i++) {
+                // Move in the current direction
+                switch ($direction) {
+                    case 'up': $currentY--; break;
+                    case 'down': $currentY++; break;
+                    case 'left': $currentX--; break;
+                    case 'right': $currentX++; break;
+                }
+
+                // Check if the move is out of bounds
+                if (!$this->isInBounds($currentX, $currentY)) {
+                    // Place exit if we go beyond the grid
+                    //$grid[$currentY][$currentX] = 'E'; // Mark the exit
+                    $exitCorridor = true;
+                    break;
+                }
+
+                // Check if the move is valid (within bounds and not overlapping walls, rooms, or existing corridors)
+                if (
+                    $grid[$currentY][$currentX] === 'W' ||  // Wall check
+                    $grid[$currentY][$currentX] === 'R'     // Room check
+                ) {
+                    $this->rollbackCorridor($grid, $corridorPath);
+                    break; // Stop if out of bounds, tile is occupied, or the corridor meets another
+                }
+
+                if ($grid[$currentY][$currentX] === 'C' || $grid[$currentY][$currentX] === 'D') {
+                    break; // Stop if out of bounds, tile is occupied, or the corridor meets another
+                }
+
+                // Mark the new position as part of the corridor
+                $grid[$currentY][$currentX] = 'C';
+                $corridorPath[] = ['x' => $currentX, 'y' => $currentY];
+
+                // Occasionally change direction randomly (20% chance)
+                if (rand(0, 100) / 100 < $turnChance) {
+                    // Randomly pick a new direction (excluding the opposite direction)
+                    $newDirections = array_diff($directions, [$direction]);
+                    $direction = $newDirections[array_rand($newDirections)];
+                }
+            }
+
+            // If the exit is placed, stop the function
+            if ($exitCorridor) {
+                logger("Corridor exited and placed exit at ({$currentX}, {$currentY})");
+                return;
+            }
+
+            // After the corridor, place a door at the end or continue a room
+            if ($this->isInBounds($currentX, $currentY) && $grid[$currentY][$currentX] === 'C') {
+                $grid[$currentY][$currentX] = 'D'; // End corridor with a door
+                logger("Corridor Placed, End Door placed at ({$currentX}, {$currentY})");
+            }
+
+            // Attempt to add a room from the end door
+            if ($this->addRoomFromDoor($grid, ['x' => $currentX, 'y' => $currentY], true)) {
+                // Room placed successfully
+                return;
+            } else {
+                // Rollback the corridor if no room could be placed
+                logger("Room placement failed. Rolling back corridor.");
+                $this->rollbackCorridor($grid, $corridorPath);
+            }
+
+            $attempts++;
+        }
+
+        // If the loop reaches the max attempts, log that corridor placement failed
+        logger("Failed to place a corridor after {$maxAttempts} attempts.");
+    }
 
 
     private function rollbackCorridor(&$grid, $corridorPath)
     {
         // Reverse traverse the corridor path
-        foreach (array_reverse($corridorPath) as $tile) {
+        foreach ($corridorPath as $tile) {
             $x = $tile['x'];
             $y = $tile['y'];
 
-            // Stop rollback if encountering a door connected to another room
-            $adjacentOffsets = [
-                [-1, 0], [1, 0], [0, -1], [0, 1]
-            ];
-
-            foreach ($adjacentOffsets as [$dx, $dy]) {
-                $adjX = $x + $dx;
-                $adjY = $y + $dy;
-
-                if ($this->isInBounds($adjX, $adjY) && isset($grid[$adjY][$adjX])) {
-                    if ($grid[$adjY][$adjX] === 'R') {
-                        return; // Stop rollback if connected to a valid path
-                    }
-                }
-            }
-
-            // Remove the corridor tile
             $grid[$y][$x] = '#';
+
         }
     }
 
@@ -541,12 +702,6 @@ class Dungeon extends Model
     }
 
 
-
-
-
-    /**
-     * Validate if a room can be placed at the given coordinates.
-     */
     private function canPlaceRoom(&$grid, $x, $y, $width, $height)
     {
         for ($row = $y; $row < $y + $height; $row++) {
@@ -564,60 +719,6 @@ class Dungeon extends Model
     }
 
 
-
-
-    /**
-     * Add a corridor from a door.
-     */
-    private function addCorridorFromDoor(&$grid, $door)
-    {
-        $length = rand(3, 6); // Limit corridor length
-        $direction = $this->getCorridorDirection($door, $grid);
-
-        if (!$direction) {
-            return; // Skip if no valid direction is detected
-        }
-
-        $corridorPath = []; // Track corridor tiles
-
-        for ($i = 0; $i < $length; $i++) {
-            switch ($direction) {
-                case 'up': $door['y']--; break;
-                case 'down': $door['y']++; break;
-                case 'left': $door['x']--; break;
-                case 'right': $door['x']++; break;
-            }
-
-            // Validate grid boundaries
-            if (
-                !$this->isInBounds($door['x'], $door['y']) ||
-                isset($grid[$door['y']][$door['x']]) && $grid[$door['y']][$door['x']] !== '#'
-            ) {
-                break; // Stop if out of bounds or tile is occupied
-            }
-
-            $grid[$door['y']][$door['x']] = 'C'; // Mark as corridor
-            $corridorPath[] = ['x' => $door['x'], 'y' => $door['y']];
-        }
-
-        // Place a door at the end of the corridor
-        $endX = $door['x'];
-        $endY = $door['y'];
-
-        if (
-            $this->isInBounds($endX, $endY) &&
-            isset($grid[$endY][$endX]) &&
-            $grid[$endY][$endX] === 'C'
-        ) {
-            $grid[$endY][$endX] = 'D'; // End corridor with a door
-
-            // Attempt to add a room from the door
-            if (!$this->addRoomFromDoor($grid, ['x' => $endX, 'y' => $endY], true)) {
-                // Rollback the corridor if no room could be placed
-                $this->rollbackCorridor($grid, $corridorPath);
-            }
-        }
-    }
 
 
     private function isAdjacentToDoor(&$grid, $x, $y)
@@ -643,17 +744,11 @@ class Dungeon extends Model
     }
 
 
-
     private function isInBounds($x, $y)
     {
         return $x >= 0 && $x < $this->width && $y >= 0 && $y < $this->height;
     }
 
-
-
-    /**
-     * Mark all corridor ('C') tiles on the edges of the grid as exits ('E').
-     */
     private function markExits(&$grid)
     {
         // Top and Bottom Edges
@@ -676,9 +771,6 @@ class Dungeon extends Model
             }
         }
     }
-
-
-
 
     private function getCorridorDirection($door, $grid)
     {
