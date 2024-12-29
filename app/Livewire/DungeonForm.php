@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Models\Room;
 use Livewire\Component;
 use App\Models\Dungeon;
 use App\Models\DungeonSetting;
@@ -61,10 +62,29 @@ class DungeonForm extends Component
         // Step 2: Generate the Dungeon Grid
         $grid = $dungeon->generateDungeon();
 
+
+
         // Step 3: Save the Grid to the Dungeon
         $dungeon->update([
             'grid' => json_encode($grid),
         ]);
+
+        $keyRooms = $this->getKeyRooms($dungeon->id);
+        $startRoomId = $keyRooms['startRoom'];
+        $bossRoomId = $keyRooms['bossRoom'];
+
+        $startRoom = Room::find($startRoomId);
+        if ($startRoom) {
+            $startRoom->type = 'start'; // Assign 'start' type
+            $startRoom->save();
+        }
+
+        // Update the room type for the boss room
+        $bossRoom = Room::find($bossRoomId);
+        if ($bossRoom) {
+            $bossRoom->type = 'boss'; // Assign 'boss' type
+            $bossRoom->save();
+        }
 
         // Step 4: Reset the form fields
         $this->reset(['name', 'description', 'size']);
@@ -72,6 +92,42 @@ class DungeonForm extends Component
 
         // Step 5: Redirect to the Dungeon Grid view
         return redirect()->route('dungeons.show', ['id' => $dungeon->id]);
+    }
+
+    public function getKeyRooms($dungeonId) {
+        // Get the room with the minimum X + Y sum
+        $lowestRoom = Room::where('dungeon_id', $dungeonId)
+            ->selectRaw('id, x + y as x_plus_y')  // Calculate X + Y
+            ->orderByRaw('x + y ASC')  // Sort by X + Y in ascending order
+            ->first();  // Get the first result (minimum)
+
+        // Get the room with the maximum X + Y sum
+        $highestRoom = Room::where('dungeon_id', $dungeonId)
+            ->selectRaw('id, x + y as x_plus_y')  // Calculate X + Y
+            ->orderByRaw('x + y DESC')  // Sort by X + Y in descending order
+            ->first();  // Get the first result (maximum)
+
+        // Get the room with the highest Y and lowest X
+        $highestYLowestXRoom = Room::where('dungeon_id', $dungeonId)
+            ->orderBy('y', 'desc')  // Highest Y first
+            ->orderBy('x', 'asc')   // Lowest X first
+            ->first();  // Get the first result
+
+        // Get the room with the lowest Y and highest X
+        $lowestYHighestXRoom = Room::where('dungeon_id', $dungeonId)
+            ->orderBy('y', 'asc')   // Lowest Y first
+            ->orderBy('x', 'desc')  // Highest X first
+            ->first();  // Get the first result
+
+        $keyRooms = [$lowestRoom, $highestRoom, $highestYLowestXRoom, $lowestYHighestXRoom];
+        $startRoom = array_shift($keyRooms);
+        shuffle($keyRooms);
+        $bossRoom = array_shift($keyRooms);
+
+        return [
+            'startRoom' => $startRoom->id,
+            'bossRoom' => $bossRoom->id,
+        ];
     }
 
     // Get dimensions based on size

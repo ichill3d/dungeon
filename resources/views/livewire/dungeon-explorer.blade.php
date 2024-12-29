@@ -1,4 +1,4 @@
-<div class="dungeon-explorer">
+<div class="dungeon-explorer" wire:ignore>
     <div class="bg-black relative" style="width: {{$dungeon->width}}rem; height: {{$dungeon->height}}rem;">
 
         <!-- Rooms -->
@@ -8,6 +8,7 @@
                     <div data-room-id="{{ $room->id }}"
                          data-x="{{ $room->x + $j }}" data-y="{{ $room->y  + $i }}"
                          data-room-width="{{ $room->width }}" data-room-height="{{ $room->height }}"
+                         data-is-explored="{{ $room->is_explored }}"
                          class="room absolute border border-gray-300 bg-gray-500
                          @if($room->id === $startRoomId)
                             bg-green-500 border-green-500
@@ -21,7 +22,9 @@
                                 left: {{ $room->x + $j }}rem;
                                 width: 1rem;
                                 height: 1rem;
+                                @if($room->is_explored === 0)
                                 display: none;
+                                @endif
                          ">
                     </div>
                 @endfor
@@ -33,8 +36,13 @@
             @foreach(json_decode($corridor->cells) as $cell)
                 <div class="corridor absolute bg-blue-600 border border-gray-300"
                      data-corridor-id="{{ $corridor->id }}"
+                     data-is-explored="{{ $corridor->is_explored }}"
                      data-x="{{ $cell->x }}" data-y="{{ $cell->y }}"
-                     style="top: {{ $cell->y }}rem; left: {{ $cell->x }}rem; width: 1rem; height: 1rem; display: none;">
+                     style="top: {{ $cell->y }}rem; left: {{ $cell->x }}rem; width: 1rem; height: 1rem;
+                      @if($corridor->is_explored === 0)
+                     display: none;
+                     @endif
+                     ">
                 </div>
             @endforeach
         @endforeach
@@ -42,7 +50,12 @@
         <!-- Doors -->
         @foreach($doors as $door)
             <div data-door-id="{{ $door->id }}" data-x="{{ $door->x }}" data-y="{{ $door->y }}" class="door absolute bg-orange-500 border border-gray-300"
-                 style="top: {{ $door->y }}rem; left: {{ $door->x }}rem; width: 1rem; height: 1rem; display: none;">
+                 data-is-explored="{{ $door->is_explored }}"
+                 style="top: {{ $door->y }}rem; left: {{ $door->x }}rem; width: 1rem; height: 1rem;
+                  @if($door->is_explored === 0)
+                 display: none;
+                 @endif
+                 ">
             </div>
         @endforeach
 
@@ -60,9 +73,13 @@
             // Show the room by ID
             function showRoom(roomId) {
                 $('[data-room-id="' + roomId + '"]').fadeIn();  // Reveal the initial room
+                $('[data-room-id="' + roomId + '"]').attr('data-is-explored', 1);
+                Livewire.dispatch('revealRoom', { roomId: roomId });
             }
             function showCorridor(corridorId){
                 $('.corridor[data-corridor-id="' + corridorId + '"]').fadeIn();
+                $('.corridor[data-corridor-id="' + corridorId + '"]').attr('data-is-explored', 1);
+                Livewire.dispatch('revealCorridor', { corridorId: corridorId });
             }
 
             // Show doors adjacent to the current room
@@ -90,7 +107,10 @@
                             if (checkIfDiscoveredDoor.length) {
                                 let discoveredDoorId = checkIfDiscoveredDoor.data('door-id'); // Correctly get door id
                                 console.log("Discovered door ID: " + discoveredDoorId);
+
                                 $(".door[data-door-id='" + discoveredDoorId + "']").fadeIn(); // Show the adjacent door
+                                $(".door[data-door-id='" + discoveredDoorId + "']").attr('data-is-explored', 1);
+                                Livewire.dispatch('revealDoor', { doorId: discoveredDoorId });
                             }
                         });
                     }
