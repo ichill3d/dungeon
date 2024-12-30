@@ -26,9 +26,19 @@ class Dungeon extends Model
     {
         return $this->hasMany(Room::class);
     }
-    public function settings()
+
+    public function dungeon_corridors() {
+        return $this->hasMany(DungeonCorridor::class);
+    }
+
+    public function type() {
+        return $this->belongsTo(DungeonType::class, 'dungeon_type_id');
+    }
+
+    public function setting()
     {
-        return $this->hasOne(DungeonSetting::class);
+        return $this->belongsTo(DungeonSetting::class, 'dungeon_setting_id');  // Use the foreign key column
+
     }
 
     public function initializeGrid()
@@ -493,9 +503,9 @@ class Dungeon extends Model
      */
     private function addRoomFromDoor(&$grid, $door, $isFromCorridor = false)
     {
-        $initialWidth = rand(4, 8); // Initial random room width
-        $initialHeight = rand(4, 8); // Initial random room height
-        $minRoomSize = 3; // Minimum room size
+        $initialWidth = rand(4, 15); // Initial random room width
+        $initialHeight = rand(4, 15); // Initial random room height
+        $minRoomSize = 4; // Minimum room size
 
         $roomWidth = $initialWidth;
         $roomHeight = $initialHeight;

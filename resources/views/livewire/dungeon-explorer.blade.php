@@ -69,7 +69,21 @@
                 </div>
             </div>
         </div>
-        <div class="w-1/4 h-full bg-green-300">test</div>
+        <div class="w-1/4 h-full bg-green-300 p-4 m-2 rounded-xl">
+            @foreach($rooms as $room)
+               <div style="display: none" class="object-description" data-object-type="room" data-object-id="{{ $room->id }}"> {{ $room->description }}</div>
+            @endforeach
+            @foreach($corridors as $corridor)
+                <div style="display: none"  class="object-description" data-object-type="corridor" data-object-id="{{ $corridor->id }}">
+                    {{ $corridor->description }}
+                <hr>
+                    is trapped: {{ $corridor->is_trapped }}<br/>
+                    @if($corridor->is_trapped === 1)
+                    {{ $corridor->trap_description }}
+                    @endif
+                </div>
+            @endforeach
+        </div>
     </div>
 
     <style>
@@ -121,119 +135,108 @@
             setRandomTile();
 
 
-
-
-function zoomtoRoom(thisRoomId) {
-
-
-    let Xs = [];
-    let Ys = [];
-    let minX = 0;
-    let minY = 0;
-    let maxX = 0;
-    let maxY = 0;
-    let roomTopEdge = 0;
-    let roomLeftEdge = 0;
-    let roomBottomEdge = 0;
-    let roomRightEdge = 0;
-    let roomWidth = 0;
-    let roomHeight = 0;
-
-    // Get the container's dimensions (dungeon area and visible holder)
-    let container = $("#dungeonArea");
-    let containerHolder = $("#dungeonHolder");
+            function showItemDescription(objectType, objectId) {
+                $(".object-description").hide();
+                let objectDescription = $('.object-description[data-object-type="'+objectType+'"][data-object-id="'+objectId+'"]');
+                objectDescription.fadeIn();
+            }
 
 
 
-    // Get the current zoom value (if applied) or assume 1 if not
-    let currentZoom = container.css('zoom') !== 'normal' ? parseFloat(container.css('zoom')) : 1;
-    container.css('zoom', currentZoom);
+            function zoomToObject(objectType, objectId) {
 
-    let containerWidth = container.width();
-    let containerHeight = container.height();
-    let holderWidth = containerHolder.width();
-    let holderHeight = containerHolder.height();
+                    let Xs = [];
+                    let Ys = [];
+                    let minX = 0;
+                    let minY = 0;
+                    let maxX = 0;
+                    let maxY = 0;
+
+                    let objectTopEdge = 0;
+                    let objectLeftEdge = 0;
+                    let objectBottomEdge = 0;
+                    let objectRightEdge = 0;
+                    let objectWidth = 0;
+                    let objectHeight = 0;
+
+                    // Get the container's dimensions (dungeon area and visible holder)
+                    let container = $("#dungeonArea");
+                    let containerHolder = $("#dungeonHolder");
+
+                    // Get the current zoom value (if applied) or assume 1 if not
+                    let currentZoom = container.css('zoom') !== 'normal' ? parseFloat(container.css('zoom')) : 1;
+                    container.css('zoom', currentZoom);
+
+                    let holderWidth = containerHolder.width();
+                    let holderHeight = containerHolder.height();
+
+                    // Collect all the cells that belong to the room
+                    console.log("."+objectType+"[data-"+objectType+"-id='" + objectId + "']");
+                    $("."+objectType+"[data-"+objectType+"-id='" + objectId + "']").each(function() {
+                        Xs.push($(this).data('x'));
+                        Ys.push($(this).data('y'));
+                    }).promise().done(function() {
+                        // Calculate min/max X and Y values to determine room boundaries
+                        minX = Math.min.apply(null, Xs);
+                        minY = Math.min.apply(null, Ys);
+                        maxX = Math.max.apply(null, Xs);
+                        maxY = Math.max.apply(null, Ys);
+
+                        // Get the position and size of the room based on minX and minY
+                        objectTopEdge = $("."+objectType+"[data-x='" + minX + "'][data-y='" + minY + "']").position().top;
+                        objectLeftEdge = $("."+objectType+"[data-x='" + minX + "'][data-y='" + minY + "']").position().left;
+                        objectBottomEdge = objectTopEdge + $("."+objectType+"[data-x='" + minX + "'][data-y='" + minY + "']").outerHeight();
+                        objectRightEdge = objectLeftEdge + $("."+objectType+"[data-x='" + minX + "'][data-y='" + minY + "']").outerWidth();
+
+                        // Calculate the full width and height of the room (assuming each cell has the same width and height)
+                        objectWidth = (maxX - minX + 1) * $("."+objectType).outerWidth();
+                        objectHeight = (maxY - minY + 1) * $("."+objectType).outerHeight();
+
+                        // Calculate the scale based on the visible holder's size
+                        let scaleX = holderWidth / (objectWidth + (objectWidth * 30 / 100));
+                        let scaleY = holderHeight / (objectHeight + (objectHeight * 30 / 100));
+                        let scale = Math.min(scaleX, scaleY); // Use the smaller scale to ensure the room fits
+
+                        scale = Math.min(scale, 7)
+                        // Calculate the new zoom based on the existing zoom and the new scale
+                        let newZoom = scale;
+
+                        // Apply the new zoom (scale) to the #dungeonArea (scrollable parent)
+                        container.css('zoom', newZoom);
+
+                        setTimeout(function(){
+                            objectTopEdge = $("."+objectType+"[data-x='" + minX + "'][data-y='" + minY + "']").position().top;
+                            objectLeftEdge = $("."+objectType+"[data-x='" + minX + "'][data-y='" + minY + "']").position().left;
+                            // Calculate the scaled dimensions of the room after zooming
+                            let scaledObjectWidth = objectWidth * newZoom;
+                            let scaledObjectHeight = objectHeight * newZoom;
+
+                            // Calculate the scroll position to center the room within the zoomed container
+                            let scrollTop = objectTopEdge  - ((holderHeight - scaledObjectHeight) / 2);
+                            let scrollLeft = objectLeftEdge  - ((holderWidth - scaledObjectWidth) / 2);
+
+                            console.log("scrollTop: " + scrollTop);
+                            console.log("scrollLeft: " + scrollLeft);
+
+                            // Animate the scroll to center the room smoothly
+                            containerHolder.animate({
+                                scrollTop: scrollTop,
+                                scrollLeft: scrollLeft
+                            }, 1); // 500ms for smooth scrolling
+
+                        }, 10);
 
 
-
-    // Collect all the cells that belong to the room
-    $(".room[data-room-id='" + thisRoomId + "']").each(function() {
-        Xs.push($(this).data('x'));
-        Ys.push($(this).data('y'));
-    }).promise().done(function() {
-        // Calculate min/max X and Y values to determine room boundaries
-        minX = Math.min.apply(null, Xs);
-        minY = Math.min.apply(null, Ys);
-        maxX = Math.max.apply(null, Xs);
-        maxY = Math.max.apply(null, Ys);
-
-        // Get the position and size of the room based on minX and minY
-        roomTopEdge = $(".room[data-x='" + minX + "'][data-y='" + minY + "']").position().top;
-        roomLeftEdge = $(".room[data-x='" + minX + "'][data-y='" + minY + "']").position().left;
-        roomBottomEdge = roomTopEdge + $(".room[data-x='" + minX + "'][data-y='" + minY + "']").outerHeight();
-        roomRightEdge = roomLeftEdge + $(".room[data-x='" + minX + "'][data-y='" + minY + "']").outerWidth();
-
-        // Calculate the full width and height of the room (assuming each cell has the same width and height)
-        roomWidth = (maxX - minX + 1) * $(".room").outerWidth();
-        roomHeight = (maxY - minY + 1) * $(".room").outerHeight();
-
-        console.log("roomTopEdge: " + roomTopEdge);
-        console.log("roomLeftEdge: " + roomLeftEdge);
-        console.log("roomBottomEdge: " + roomBottomEdge);
-        console.log("roomRightEdge: " + roomRightEdge);
-        console.log("roomWidth: " + roomWidth);
-        console.log("roomHeight: " + roomHeight);
-
-        // Calculate the scale based on the visible holder's size
-        let scaleX = holderWidth / (roomWidth + (roomWidth * 30 / 100));
-        let scaleY = holderHeight / (roomHeight + (roomHeight * 30 / 100));
-        let scale = Math.min(scaleX, scaleY); // Use the smaller scale to ensure the room fits
-
-        scale = Math.min(scale, 7)
-        // Calculate the new zoom based on the existing zoom and the new scale
-        let newZoom = scale;
-
-
-        console.log("scale: " + scale);
-
-        console.log("currentZoom: " + currentZoom);
-        console.log("newZoom: " + newZoom);
-
-        // Apply the new zoom (scale) to the #dungeonArea (scrollable parent)
-        container.css('zoom', newZoom);
-
-        setTimeout(function(){
-            roomTopEdge = $(".room[data-x='" + minX + "'][data-y='" + minY + "']").position().top;
-            roomLeftEdge = $(".room[data-x='" + minX + "'][data-y='" + minY + "']").position().left;
-            // Calculate the scaled dimensions of the room after zooming
-            let scaledRoomWidth = roomWidth * newZoom;
-            let scaledRoomHeight = roomHeight * newZoom;
-
-            // Calculate the scroll position to center the room within the zoomed container
-            let scrollTop = roomTopEdge  - ((holderHeight - scaledRoomHeight) / 2);
-            let scrollLeft = roomLeftEdge  - ((holderWidth - scaledRoomWidth) / 2);
-
-            console.log("scrollTop: " + scrollTop);
-            console.log("scrollLeft: " + scrollLeft);
-
-            // Animate the scroll to center the room smoothly
-            containerHolder.animate({
-                scrollTop: scrollTop,
-                scrollLeft: scrollLeft
-            }, 1); // 500ms for smooth scrolling
-
-        }, 10);
-
-
-    });
-}
+                    });
+                    showItemDescription(objectType, objectId);
+                }
 
             $(".room").click(function() {
-                zoomtoRoom($(this).data('room-id'));
+                zoomToObject('room', $(this).data('room-id'));
             });
-$(".corridor").click(function() {
-    zoomtoCorridor($(this).data('corridor-id'));
-});
+            $(".corridor").click(function() {
+                zoomToObject('corridor', $(this).data('corridor-id'));
+            });
 
              // Initial zoom level (no zoom)
             const zoomFactor = 0.5; // Zoom step

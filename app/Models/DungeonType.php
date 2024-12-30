@@ -15,4 +15,8 @@ class DungeonType extends Model
     {
         $this->belongsTo(DungeonSetting::class);
     }
+    public function dungeons()
+    {
+        return $this->hasMany(Dungeon::class, 'dungeon_type_id');  // Use the foreign key column
+    }
 }
