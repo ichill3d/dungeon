@@ -493,9 +493,9 @@ class Dungeon extends Model
      */
     private function addRoomFromDoor(&$grid, $door, $isFromCorridor = false)
     {
-        $initialWidth = rand(4, 8); // Initial random room width
-        $initialHeight = rand(4, 8); // Initial random room height
-        $minRoomSize = 3; // Minimum room size
+        $initialWidth = rand(4, 15); // Initial random room width
+        $initialHeight = rand(4, 15); // Initial random room height
+        $minRoomSize = 4; // Minimum room size
 
         $roomWidth = $initialWidth;
         $roomHeight = $initialHeight;
