@@ -1,15 +1,18 @@
 <?php
-
 namespace App\Livewire;
 
-use App\Models\DungeonCorridor;
-use App\Models\Room;
-use Livewire\Component;
 use App\Models\Dungeon;
+use App\Models\DungeonCorridor;
 use App\Models\DungeonSetting;
 use App\Models\DungeonType;
+use App\Models\Room;
+use App\Services\OpenAIService;
 use Illuminate\Support\Facades\Auth;
-use MongoDB\Driver\ReadPreference;
+use Livewire\Component;
+
+ini_set('max_execution_time', 300);  // 5 minutes
+ini_set('max_input_time', 300);      // 5 minutes
+ini_set('memory_limit', '512M');     // 512MB memory
 
 class DungeonForm extends Component
 {
@@ -95,7 +98,7 @@ class DungeonForm extends Component
         $this->determineCorridorTrapped($dungeon->id);
 
         //getObjectDescription
-        $dungeon->getObjectDescriptions($dungeon);
+        $this->getObjectDescriptions($dungeon->id);
 
         // Step 4: Reset the form fields
         $this->reset(['name', 'description', 'size']);
@@ -105,33 +108,50 @@ class DungeonForm extends Component
         return redirect()->route('dungeons.show', ['id' => $dungeon->id]);
     }
 
-    public function getObjectDescriptions($dungeon){
+    public function getObjectDescriptions($dungeonId){
+
+            $dungeon = Dungeon::find($dungeonId);
+
+            if (!$dungeon) {
+                throw new \Exception("Dungeon with ID {$dungeonId} not found.");
+            }
 
             $openAIService = new OpenAIService(); // Instantiate OpenAI service
+
+
 
             $party = 4;
             $rank = 'novice';
 
-            $prompt = "Let's generate rooms for a dungeon. I will give you a basic information for each room, and you will return the description. You need to generate a description for each room. Await first room. The dungeon is a " . $dungeon->size . " dungeon in the " . $dungeon->setting->name ." setting. And on type: " . $dungeon->type->name . ". If the room is of type monster, supply monster stats for Savage Worlds SWADE RPG rules. All stats should be in the Savage Worlds SWADE RPG rules. The adventurer are from rank: " . $rank . ".";
+//        $initialContext = [
+//            ['role' => 'system',
+//                'content' => "Let's generate rooms for a dungeon. The dungeon is a " . $dungeon->size . " dungeon in the " . $dungeon->setting->name . " setting. The dungeon type is: " . $dungeon->type->name . ". The adventurers are from rank: " . $rank . "."]
+//        ];
+        $initialContext = [
+            ['role' => 'system',
+                'content' => "Let's generate rooms for a dungeon. The dungeon is a tiny dungeon in the Post Apocalyptic setting. The dungeon type is: Nuclear Fallout Shelter. The adventurers are from rank: " . $rank . ". Give only short description of the room. No room titles. No Quest details or explanations to the players. Give any stat related data in the format of the Savage Worlds SWADE RPG rules. Give only one room at a time."]
+        ];
 
-            $openAIService->generateChatResponse([
-                ['role' => 'system', 'content' => $prompt]
-            ],
-            50);
+
 
             $startRoom = $dungeon->rooms->where('type', 'start')->first();
             $bossRoom = $dungeon->rooms->where('type', 'boss')->first();
 
-    $prompt = "Generate details and description for staring room. no combat encounter here. ";
-    $startRoomdescription = $openAIService->generateChatResponse([
-        ['role' => 'user', 'content' => $prompt]
-    ],
-        50);
-$startRoom->description = $startRoomdescription;
-$startRoom->save();
+            $prompt = "Generate details and description for staring room. no combat encounter here. ";
+            $startRoomdescription = $openAIService->generateChatResponse([
+                ['role' => 'user', 'content' => $prompt]
+            ],
+                600);
+            $startRoom->description = $startRoomdescription;
+            $startRoom->save();
 
-            $rooms = $dungeon->rooms;
-            $corridors = $dungeon->corridors;
+
+        $prompt = "Generate details and description for the boss room. Boss Monster encounter here. Additional ".$party." novice monster(s) here. ";
+        $bossRoomdescription = $openAIService->generateChatResponse(array_merge($initialContext, [['role' => 'user', 'content' => $prompt]]), 600);
+        $bossRoom->description = $bossRoomdescription;
+        $bossRoom->save();
+
+            $rooms = $dungeon->rooms->whereNotIn('type', ['start', 'boss']);
 
 
 
@@ -152,7 +172,7 @@ $startRoom->save();
                             'medium' => "There are " . $party + rand(-2, 5) . " average monster(s). ",
                             'hard' => "There are " . $party + rand(-2, 2) . " novice monster(s). And there are " . $party + rand(-3, 0) . " hard monster(s).",
                         };
-                        $roomTypeContent = "This is a monster room. There is a combat encounter. Difficulty is : " . $difficultyText . ".  ";
+                        $roomTypeContent = "This is a monster room. There is a combat encounter. Give the monster stats for the Savage Worlds RPG SWADE system. Only the essential stats. Difficulty is : " .$difficulty. ". " . $difficultyText . ".  ";
                         break;
                     case 'event':
                         $roomTypeContent = "This is an event room. Something good or bad happens here. There could be  a quest here, but not mandatory. Perhaps some NPC encounter, or some dungeon feature. We can be creative. Let's try to include the potential quest resolution in one of the following rooms. No Combat encounter here.";
@@ -164,37 +184,47 @@ $startRoom->save();
                         $roomTypeContent = "This is an exploration room. The Players should search the room, completing a quest or finding loot.  No Combat encounter here.";
                         break;
                     case 'other':
+                    default:
                         $roomTypeContent = "This is an other room. The Players should search the room, completing a quest or finding loot.  No Combat encounter here.";
                 }
-                $prompt = "Generate details and description for room of type " . $room->type . ". ";
-                $description = $openAIService->generateChatResponse([
-                    ['role' => 'user', 'content' => $prompt]
-                ],
-                    50);
+                // Merge initial context and room type content for description generation
+                $prompt = "Generate short details and description for room of type " . $room->type . ". Room shape is rectangular, size:" . $room->height . "m x " .$room->width. "m ." . $roomTypeContent;
+
+                // Append the system context with the current room request
+                $description = $openAIService->generateChatResponse(array_merge($initialContext, [['role' => 'user', 'content' => $prompt]]), 600);
+
                 $room->description = $description;
                 $room->save();
             }
 
-    foreach ($corridors as $corridor) {
-        $description = $openAIService->generateChatResponse([
-            ['role' => 'user', 'content' => $prompt]
-        ],
-            50);
-        $corridor->description = $description;
-        $corridor->save();
-    }
-
-        $prompt = "Generate details and description for the boss room. no combat encounter here. ";
-        $startRoomdescription = $openAIService->generateChatResponse([
-            ['role' => 'user', 'content' => $prompt]
-        ],
-            50);
-        $startRoom->description = $startRoomdescription;
-        $startRoom->save();
+        $corridors = $dungeon->dungeon_corridors;
 
 
+        $initialContext = [
+            ['role' => 'system',
+                'content' => "Let's generate corridors for a dungeon. The dungeon is a tiny dungeon in the Fantasy setting. The dungeon type is: Ancient Ruins. The adventurers are from rank: " . $rank . ". Give only short description of the corridor. No corridor titles. No Quest details or explanations to the players. Give any stat related data in the format of the Savage Worlds SWADE RPG rules. Give only one room at a time."]
+        ];
 
-            // Get the response from OpenAI
+            if(!empty($corridors)) {
+                foreach ($corridors as $corridor) {
+
+                    $prompt = "Generate short and quick details and description for corridor. no more than 2-3 sentences";
+                    $description = $openAIService->generateChatResponse(array_merge($initialContext, [['role' => 'user', 'content' => $prompt]]), 300);
+                    $corridor->description = $description;
+
+                    if ($corridor->is_trapped == 1) {
+                        $prompt = "This is a trapped corridor. generate a short description of the trap with stats and effects.";
+                        $trapDescription = $openAIService->generateChatResponse(array_merge($initialContext, [['role' => 'user', 'content' => $prompt]]), 300);
+                        $corridor->trap_description = $trapDescription;
+                    }
+
+                    $corridor->save();
+                }
+            }
+
+
+
+
 
 
     }

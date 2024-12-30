@@ -74,7 +74,14 @@
                <div style="display: none" class="object-description" data-object-type="room" data-object-id="{{ $room->id }}"> {{ $room->description }}</div>
             @endforeach
             @foreach($corridors as $corridor)
-                <div style="display: none"  class="object-description" data-object-type="corridor" data-object-id="{{ $corridor->id }}"> {{ $corridor->description }}</div>
+                <div style="display: none"  class="object-description" data-object-type="corridor" data-object-id="{{ $corridor->id }}">
+                    {{ $corridor->description }}
+                <hr>
+                    is trapped: {{ $corridor->is_trapped }}<br/>
+                    @if($corridor->is_trapped === 1)
+                    {{ $corridor->trap_description }}
+                    @endif
+                </div>
             @endforeach
         </div>
     </div>

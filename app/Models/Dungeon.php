@@ -26,9 +26,19 @@ class Dungeon extends Model
     {
         return $this->hasMany(Room::class);
     }
-    public function settings()
+
+    public function dungeon_corridors() {
+        return $this->hasMany(DungeonCorridor::class);
+    }
+
+    public function type() {
+        return $this->belongsTo(DungeonType::class, 'dungeon_type_id');
+    }
+
+    public function setting()
     {
-        return $this->hasOne(DungeonSetting::class);
+        return $this->belongsTo(DungeonSetting::class, 'dungeon_setting_id');  // Use the foreign key column
+
     }
 
     public function initializeGrid()
