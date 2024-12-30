@@ -134,11 +134,11 @@ class DungeonForm extends Component
     private function getDimensions($size)
     {
         return match ($size) {
-            'tiny' => ['width' => 15, 'height' => 15],
-            'small' => ['width' => 30, 'height' => 30],
-            'medium' => ['width' => 50, 'height' => 50],
-            'large' => ['width' => 80, 'height' => 80],
-            'enormous' => ['width' => 150, 'height' => 150],
+            'tiny' => ['width' => 25, 'height' => 25],
+            'small' => ['width' => 50, 'height' => 50],
+            'medium' => ['width' => 100, 'height' => 100],
+            'large' => ['width' => 200, 'height' => 200],
+            'enormous' => ['width' => 300, 'height' => 300],
             default => ['width' => 50, 'height' => 50],
         };
     }

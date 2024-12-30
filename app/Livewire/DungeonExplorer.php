@@ -16,7 +16,7 @@ class DungeonExplorer extends Component
     public $doors = [];
     public $exploredRooms = [];
 
-    protected $listeners = ['revealRoom', 'revealCorridor', 'revealDoor'];
+    protected $listeners = ['revealRoom', 'revealCorridor', 'revealDoor', 'openDoor'];
 
     public function mount($dungeonId)
     {
@@ -26,6 +26,13 @@ class DungeonExplorer extends Component
         $this->corridors = DungeonCorridor::where('dungeon_id', $dungeonId)->get();
         $this->doors = DungeonDoor::where('dungeon_id', $dungeonId)->get();
 
+    }
+    public function openDoor($doorId) {
+        $door = DungeonDoor::find($doorId);
+        if ($door) {
+            $door->is_open = 1;
+            $door->save();
+        }
     }
 
     public function revealRoom($roomId) {
