@@ -71,7 +71,45 @@
         </div>
         <div class="w-1/4 h-full bg-green-300 p-4 m-2 rounded-xl">
             @foreach($rooms as $room)
-               <div style="display: none" class="object-description" data-object-type="room" data-object-id="{{ $room->id }}"> {{ $room->description }}</div>
+                @php
+                $roomData = json_decode($room->description);
+                @endphp
+               <div style="display: none" class="object-description" data-object-type="room" data-object-id="{{ $room->id }}">
+{{--                  <pre> {{$room->description}}</pre>--}}
+                <div class="font-bold">{{ $roomData->room_name }}</div>
+                   <div class="mt-1">{{ $roomData->room_description }}</div>
+                   @if($room->type === 'boss' || $room->type === 'monster')
+                    <div class="bold">Monsters:</div>
+                         @if($room->type === 'boss')
+                           <div class="inline-block font-semibold"><span class="inline-block px-1">BOSS</span> {{ $roomData->boss_monster->name }}</div>
+                       @endif
+                            ,
+                       @if(isset($roomData->monster))
+                           <div class="inline-block">
+                               <span class="font-semibold">{{ $roomData->monster->amount }}x </span>
+                               {{ $roomData->monster->name }}
+                           </div>
+                       @endif
+
+
+
+                   @endif
+                   @if($room->type === 'boss')
+                       <x-monster-stats :monster="$roomData->boss_monster" :type="'boss'"/>
+                   @endif
+                   @if(isset($roomData->monster))
+                       <x-monster-stats :monster="$roomData->monster" :type="'monster'"/>
+                   @endif
+                   @if(isset($roomData->monsters))
+                       @if(is_array($roomData->monsters))
+                           @foreach($roomData->monsters as $monster)
+                               <x-monster-stats :monster="$monster" :type="'monster'"/>
+                           @endforeach
+                       @else
+                           <x-monster-stats :monster="$roomData->monsters" :type="'monster'"/>
+                       @endif
+                   @endif
+               </div>
             @endforeach
             @foreach($corridors as $corridor)
                 <div style="display: none"  class="object-description" data-object-type="corridor" data-object-id="{{ $corridor->id }}">

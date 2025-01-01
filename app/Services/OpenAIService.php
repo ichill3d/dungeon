@@ -14,23 +14,32 @@ class OpenAIService
 
     public function generateChatResponse($messages, $max_tokens = 100)
     {
-        // You can dynamically fetch the ngrok URL from the .env file
-        $ngrokUrl = env('NGROK_URL'); // Make sure NGROK_URL is set in your .env file
+        try {
+            // Send a POST request to the OpenAI API
+            $response = Http::withHeaders([
+                'Content-Type' => 'application/json',
+                'Authorization' => 'Bearer ' . $this->apiKey,
+            ])->post('https://api.openai.com/v1/chat/completions', [
+                'model' => 'gpt-4o-mini', // Use a valid model like gpt-4 or gpt-3.5-turbo
+                'messages' => $messages,
+                'max_tokens' => $max_tokens,
+//                'response_format' => $jsonResponse  ? ['type'=> 'json_object'] : ['type' => 'text'], // Ensure valid API formatting
+            ]);
 
-        // Send a POST request to the OpenAI API via your ngrok tunnel
-        $response = Http::withHeaders([
-            'Content-Type' => 'application/json',
-            'Authorization' => 'Bearer ' . $this->apiKey,
-        ])->post('https://api.openai.com/v1/chat/completions', [
-            'model' => 'gpt-4o-mini', // You can use other models, e.g., gpt-3.5-turbo
-            'messages' => $messages,
-            'max_tokens' => $max_tokens,
-            'store' => true, // Optional based on API capabilities
-        ]);
+            // Check if the response is successful
+            if ($response->successful()) {
+                $responseData = $response->json();
+                return $responseData['choices'][0]['message']['content'] ?? 'No content returned.';
+            }
 
-        return $response->json()['choices'][0]['message']['content'];
+            // Handle unsuccessful API responses
+            return 'Error: ' . $response->status() . ' - ' . $response->body();
 
-        // Handle errors
-        return 'Error: Unable to generate response. ' . $response->status() . ' - ' . $response->body();
+        } catch (\Exception $e) {
+            // Catch any exceptions and return the error message
+            return 'Exception: ' . $e->getMessage();
+        }
+
     }
+
 }

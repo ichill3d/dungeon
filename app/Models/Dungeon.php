@@ -20,6 +20,8 @@ class Dungeon extends Model
         'user_id',
         'session_id',
         'grid',
+        'dungeon_type_id',
+        'dungeon_setting_id',
     ];
 
     public function rooms()
@@ -27,7 +29,7 @@ class Dungeon extends Model
         return $this->hasMany(Room::class);
     }
 
-    public function dungeon_corridors() {
+    public function corridors() {
         return $this->hasMany(DungeonCorridor::class);
     }
 

@@ -33,10 +33,10 @@ class DungeonForm extends Component
     ];
 
     // Update dungeon types based on selected setting
-    public function updatedSettingId()
+    public function updatedDungeonSettingId()
     {
         $this->dungeonTypes = DungeonType::where('dungeon_setting_id', $this->dungeonSettingId)->get();
-        $this->selectedDungeonTypeId = null; // Reset the selected type when the setting changes
+        $this->selectedDungeonTypeId = null;
     }
 
     // Save the dungeon after validation
@@ -51,23 +51,23 @@ class DungeonForm extends Component
             $this->selectedDungeonTypeId = $randomDungeonType->id;
         }
 
+
         // Step 1: Create the Dungeon entry
         $dungeon = Dungeon::create([
             'name' => $this->name,
             'description' => $this->description,
-            'dungeont_setting_id' => $this->dungeonSettingId,
+            'dungeon_setting_id' => $this->dungeonSettingId,
+            'dungeon_type_id' => $this->selectedDungeonTypeId,
             'size' => $this->size,
             'width' => $dimensions['width'],
             'height' => $dimensions['height'],
             'user_id' => Auth::id(),
             'session_id' => session('guest_session_id'),
-            'dungeon_type_id' => $this->selectedDungeonTypeId,
+
         ]);
 
         // Step 2: Generate the Dungeon Grid
         $grid = $dungeon->generateDungeon();
-
-
 
         // Step 3: Save the Grid to the Dungeon
         $dungeon->update([
@@ -110,46 +110,321 @@ class DungeonForm extends Component
 
     public function getObjectDescriptions($dungeonId){
 
-            $dungeon = Dungeon::find($dungeonId);
+            $dungeon = Dungeon::with('setting', 'type', 'rooms', 'corridors')->find($dungeonId);
+
 
             if (!$dungeon) {
                 throw new \Exception("Dungeon with ID {$dungeonId} not found.");
             }
 
-            $openAIService = new OpenAIService(); // Instantiate OpenAI service
-
-
-
             $party = 4;
             $rank = 'novice';
 
-//        $initialContext = [
-//            ['role' => 'system',
-//                'content' => "Let's generate rooms for a dungeon. The dungeon is a " . $dungeon->size . " dungeon in the " . $dungeon->setting->name . " setting. The dungeon type is: " . $dungeon->type->name . ". The adventurers are from rank: " . $rank . "."]
-//        ];
+
+
+        $openAIService = new OpenAIService(); // Instantiate OpenAI service
+
         $initialContext = [
             ['role' => 'system',
-                'content' => "Let's generate rooms for a dungeon. The dungeon is a tiny dungeon in the Post Apocalyptic setting. The dungeon type is: Nuclear Fallout Shelter. The adventurers are from rank: " . $rank . ". Give only short description of the room. No room titles. No Quest details or explanations to the players. Give any stat related data in the format of the Savage Worlds SWADE RPG rules. Give only one room at a time."]
+                'content' => "You will be assisting a player, a group of players or a game master to play a dungeon crawl session. You will resonse only with json objects as prescribred. Lets generate rooms for a dungeon.The dungeon is a " . $dungeon->size . ".The setting is: " . $dungeon->setting->name . ".The dungeon type is: " . $dungeon->type->name . ".The adventurers are from rank: " . $rank . ". No Quest details or explanations to the players. Give any stat related data in the format of the Savage Worlds SWADE RPG rules. Give only one room or corridor at a time. Dont be repetitive with room and corridor descriptions.  Remember, JSON only—no extra text."]
         ];
+
+        $jsonInstructions = [
+            'initalInstructions' => 'Always include short summary of the description (1-2 sentences) important: Respond only in valid JSON  with the following structure  Remember, JSON only—no extra text.:',
+            'room' => [
+                'prompt' => 'Generate short details and description 3-5 sentences for room of type "{type}". Room shape is rectangular, size:{height}m x {width}m . dont mention doors (but there are some).  Remember, JSON only—no extra text.',
+                'other' => '
+                    {
+                      "room_name":"",
+                      "room_description":""
+                      "room_summary":""
+                    }
+                ',
+                'monster' => '
+                    {
+                        "room_name":"",
+                        "room_description":"",
+                        "room_summary":"",
+                        "monsters": {
+                        "amount": "",
+                          "name":"",
+                          "description":"",
+                          "stats": {
+                              "Attributes" : {
+                                  "Agility" : "",
+                                  "Smarts" : "",
+                                  "Spirit" : "",
+                                  "Strength" : "",
+                                  "Vigor" : ""
+                              },
+                              "Skills" : {
+                                  "Fighting" : "",
+                                  "Shooting" : "",
+                                  "Notice" : ""
+                              },
+                              "Pace": "",
+                              "Parry" : "",
+                              "Toughness": "",
+                              "Gear" : {
+                                "item":
+                                  {
+                                      "name" : "",
+                                      "description" : ""
+                                  }
+                              }
+                              "SpecialAbilities" : {
+                                "ability":
+                                  {
+                                      "name" : "",
+                                      "description" : ""
+                                  }
+                              }
+                            }
+                        }
+
+                    }',
+                'event' => '
+                    {
+                        "room_name":"",
+                        "room_description":"",
+                        "room_summary":"",
+                        "event":{
+                            "positive_or_negative": "",
+                            "description": "",
+                            "consequences": ""
+
+                        }
+                    }',
+                'puzzle' => '
+                    {
+                        "room_name":"",
+                        "room_description":"",
+                        "room_summary":"",
+                        "puzzle":{
+                            "description": "",
+                            "solution": "",
+                            "reward": ""
+                        }
+                    }',
+                'exploration' => '
+                    {
+                        "room_name":"",
+                        "room_description":"",
+                        "room_summary":"",
+                        "exploration":{
+                            "what_to_explore": "",
+                            "how_to_explore": "",
+                            "reward": ""
+                        }
+                    }',
+                'start' => '
+                    {
+                    "room_name":"",
+                    "room_description":"",
+                    "room_summary":""}
+                ',
+                'boss' => '
+                {
+                "room_name":"",
+                "room_description":"",
+                "room_summary":"",
+                "boss_monster":{
+
+                          "name":"",
+                          "description":"",
+                          "stats": {
+                              "Attributes" : {
+                                  "Agility" : "",
+                                  "Smarts" : "",
+                                  "Spirit" : "",
+                                  "Strength" : "",
+                                  "Vigor" : ""
+                              },
+                              "Skills" : {
+                                  "Fighting" : "",
+                                  "Shooting" : "",
+                                  "Notice" : ""
+                              },
+                              "Pace": "",
+                              "Parry" : "",
+                              "Toughness": "",
+                              "Gear" : {
+                                "item":
+                                  {
+                                      "name" : "",
+                                      "description" : ""
+                                  }
+                              },
+                              "SpecialAbilities" : {
+                                "ability":
+                                  {
+                                      "name" : "",
+                                      "description" : ""
+                                  }
+                              }
+                          }
+                }
+                        ,
+                        "monster": {
+                            "amount": "",
+                          "name":"",
+                          "description":"",
+                          "stats": {
+                              "Attributes" : {
+                                  "Agility" : "",
+                                  "Smarts" : "",
+                                  "Spirit" : "",
+                                  "Strength" : "",
+                                  "Vigor" : ""
+                              },
+                              "Skills" : {
+                                  "Fighting" : "",
+                                  "Shooting" : "",
+                                  "Notice" : ""
+                              },
+                              "Pace": "",
+                              "Parry" : "",
+                              "Toughness": "",
+                              "Gear" : {
+                                "item":
+                                  {
+                                      "name" : "",
+                                      "description" : ""
+                                  }
+                              },
+                              "SpecialAbilities" : {
+                                "ability":
+                                  {
+                                      "name" : "",
+                                      "description" : ""
+                                  }
+                              }
+
+                          }
+                        }
+}'
+
+            ],
+            'corridor' => [
+                'prompt' => 'Generate short and quick details and description for corridor. no more than 2-3 sentences. dont mention doors (but there are some).  Remember, JSON only—no extra text.',
+                'description' => '{"description":"", "corridor_summary":""}',
+                'trap' => '{
+                "description":"",
+                "effects": ""}',
+            ]
+        ];
+
+
+
+        $messages = $initialContext;
+
+
+        if($dungeon->name === '' || $dungeon->description === '') {
+
+            $promptDescriptionAddition = $dungeon->description === '' ?
+                "a short description of the dungeon. The description should be descriptive and unique аnd thematically related to the setting. " :
+                "";
+            $promptNameAddition = $dungeon->name === '' ?
+                "a name for the dungeon. The name should be creative and unique and thematically related to the setting. " :
+                "";
+            $prompt = "Generate "
+                . $promptNameAddition
+                . $promptDescriptionAddition
+                . 'The output should be a valid just and only JSON object with the following structure: {"dungeon_name":"", "dungeon_description":""}';
+            $input = ['role' => 'user', 'content' => $prompt];
+
+            $nextPrompt  = $messages;
+            $nextPrompt[] = $input;
+            $dungeonDescriptionResponse = $openAIService->generateChatResponse($nextPrompt, 3000);
+            $dungeonData = json_decode($dungeonDescriptionResponse, true);
+            if($dungeon->name !== '') {
+                $dungeonData['dungeon_name'] = $dungeon->name;
+            } else {
+                $dungeon->name = $dungeonData['dungeon_name'];
+                $dungeon->save();
+            }
+            if($dungeon->description !== '') {
+                $dungeonData['dungeon_description'] = $dungeon->description;
+            } else {
+                $dungeon->description = $dungeonData['dungeon_description'];
+                $dungeon->save();
+            }
+            $summary = ['role' => 'assistant',
+                'content' => 'Dungeon Name: ' . $dungeonData['dungeon_name'] . '. dungeon description: ' . $dungeonData['dungeon_description']
+            ];
+            $messages[] = $summary;
+
+
+            sleep(10);
+        }
+
+
+
+
+
+
 
 
 
             $startRoom = $dungeon->rooms->where('type', 'start')->first();
             $bossRoom = $dungeon->rooms->where('type', 'boss')->first();
 
-            $prompt = "Generate details and description for staring room. no combat encounter here. ";
-            $startRoomdescription = $openAIService->generateChatResponse([
-                ['role' => 'user', 'content' => $prompt]
-            ],
-                600);
+        if($bossRoom->type == 'boss') {
+            $prompt =
+                "Generate details and description for the boss room. Boss Monster encounter here. Additional " . $party . " " . $rank . " monster(s) here."
+                . str_replace(
+                    ['{type}', '{height}', '{width}'],
+                    ['boss room', $bossRoom->height, $bossRoom->width],
+                    $jsonInstructions['room']['prompt']
+                )
+                . $jsonInstructions['initalInstructions']
+                . $jsonInstructions['room']['boss'];
+            $input = ['role' => 'user', 'content' => $prompt];
+
+            $nextPrompt  = $messages;
+            $nextPrompt[] = $input;
+
+
+            $bossRoomDescription = $openAIService->generateChatResponse($nextPrompt, 3000);
+            sleep(10);
+
+
+            $bossRoom->description = $bossRoomDescription;
+            $bossRoom->save();
+            $bossRoomData = json_decode($bossRoomDescription, true);
+            $summary = ['role' => 'assistant',
+                'content' => 'Room Name: ' . $bossRoomData['room_name'] . '. Room Summary: ' . $bossRoomData['room_summary']
+            ];
+            $messages[] = $summary;
+
+            $bossRoom->save();
+        }
+
+
+            $prompt = str_replace(
+                    ['{type}', '{height}', '{width}'],
+                    ['starting room', $startRoom->height, $startRoom->width],
+                    $jsonInstructions['room']['prompt']
+                )
+                . $jsonInstructions['initalInstructions']
+                . $jsonInstructions['room']['start']
+            ;
+            $input = ['role' => 'user', 'content' => $prompt];
+            $nextPrompt  = $messages;
+            $nextPrompt[] = $input;
+            $startRoomdescription = $openAIService->generateChatResponse($nextPrompt ,2000);
+             sleep(10);
             $startRoom->description = $startRoomdescription;
+            $startRoomData = json_decode($startRoomdescription, true);
+            logger('start room data', $startRoomData);
+            $summary = ['role' => 'assistant',
+                'content' => 'Room Name: '.$startRoomData['room_name'] . '. Room Summary: ' . $startRoomData['room_summary']
+                ];
+            $messages[] = $summary;
+
             $startRoom->save();
 
 
-        $prompt = "Generate details and description for the boss room. Boss Monster encounter here. Additional ".$party." novice monster(s) here. ";
-        $bossRoomdescription = $openAIService->generateChatResponse(array_merge($initialContext, [['role' => 'user', 'content' => $prompt]]), 600);
-        $bossRoom->description = $bossRoomdescription;
-        $bossRoom->save();
 
             $rooms = $dungeon->rooms->whereNotIn('type', ['start', 'boss']);
 
@@ -170,9 +445,9 @@ class DungeonForm extends Component
                         $difficultyText = match ($difficulty) {
                             'easy' => "There are " . $party + rand(-1, 3) . " novice monster(s). ",
                             'medium' => "There are " . $party + rand(-2, 5) . " average monster(s). ",
-                            'hard' => "There are " . $party + rand(-2, 2) . " novice monster(s). And there are " . $party + rand(-3, 0) . " hard monster(s).",
+                            'hard' => "There are " . $party + rand(-2, 2) . " novice monster(s). And there are " . $party + rand(-3, 0) . " hard monster(s). ",
                         };
-                        $roomTypeContent = "This is a monster room. There is a combat encounter. Give the monster stats for the Savage Worlds RPG SWADE system. Only the essential stats. Difficulty is : " .$difficulty. ". " . $difficultyText . ".  ";
+                        $roomTypeContent = "This is a monster room. There is a combat encounter. Give the monster stats for the Savage Worlds RPG SWADE system. essential stats and gear stats with range and damage dice. Difficulty is : " .$difficulty. ". " . $difficultyText . ".  ";
                         break;
                     case 'event':
                         $roomTypeContent = "This is an event room. Something good or bad happens here. There could be  a quest here, but not mandatory. Perhaps some NPC encounter, or some dungeon feature. We can be creative. Let's try to include the potential quest resolution in one of the following rooms. No Combat encounter here.";
@@ -188,34 +463,124 @@ class DungeonForm extends Component
                         $roomTypeContent = "This is an other room. The Players should search the room, completing a quest or finding loot.  No Combat encounter here.";
                 }
                 // Merge initial context and room type content for description generation
-                $prompt = "Generate short details and description for room of type " . $room->type . ". Room shape is rectangular, size:" . $room->height . "m x " .$room->width. "m ." . $roomTypeContent;
+                $prompt =
+                    str_replace(
+                        ['{type}', '{height}', '{width}'],
+                        [$room->type, $room->height, $room->width],
+                        $jsonInstructions['room']['prompt']
+                    )
+                    .$roomTypeContent
+                    . $jsonInstructions['initalInstructions']
+                    . $jsonInstructions['room'][$room->type]
+                ;
+                $input = ['role' => 'user', 'content' => $prompt];
+                $nextPrompt  = $messages;
+                $nextPrompt[] = $input;
+                // Up to 3 attempts
+                $maxAttempts = 3;
+                $attempt = 0;
+                $roomData = null;
 
-                // Append the system context with the current room request
-                $description = $openAIService->generateChatResponse(array_merge($initialContext, [['role' => 'user', 'content' => $prompt]]), 600);
+                while ($attempt < $maxAttempts) {
+                    $attempt++;
 
-                $room->description = $description;
-                $room->save();
+                    // Call the API
+                    $roomDescription = $openAIService->generateChatResponse($nextPrompt, 3000);
+                    sleep(10);
+                    logger("Attempt #{$attempt} response: " . $roomDescription);
+
+                    // Try to parse as JSON
+                    $roomData = json_decode($roomDescription, true);
+
+                    // Check if it's valid JSON and has expected keys
+                    if (
+                        json_last_error() === JSON_ERROR_NONE
+                        && is_array($roomData)
+                        && isset($roomData['room_name'], $roomData['room_summary'])
+                    ) {
+                        // Great, we have valid JSON with the fields we need
+                        break;
+                    }
+
+                    // If we get here, the JSON was invalid or missing keys.
+                    // We can add an extra message to the conversation to instruct the model to correct itself:
+                    $messages[] = [
+                        'role' => 'system',
+                        'content' => "Your last response was invalid JSON or missing required keys. " .
+                            "Please output ONLY valid JSON with 'room_name' and 'room_summary'. No extra explanation."
+                    ];
+                }
+
+// After the loop, check if we have valid data
+                if (
+                    json_last_error() !== JSON_ERROR_NONE
+                    || !is_array($roomData)
+                    || !isset($roomData['room_name'], $roomData['room_summary'])
+                ) {
+                    // Handle the failure case: model never returned valid JSON
+                    logger('Failed to get a valid JSON structure for room data after multiple attempts.');
+                    // Decide what to do here: throw an exception, revert to a fallback, etc.
+                } else {
+                    // We have valid data
+                    logger("Final room data: ", $roomData);
+
+                    // Save room description if desired
+                    $room->description = $roomDescription;
+                    $room->save();
+
+                    // Log or proceed
+                    $summary = [
+                        'role'    => 'assistant',
+                        'content' => 'Room Name: ' . $roomData['room_name']
+                            . '. Room Summary: ' . $roomData['room_summary']
+                    ];
+                    $messages[] = $summary;
+                }
+
+
             }
 
-        $corridors = $dungeon->dungeon_corridors;
+        $corridors = $dungeon->corridors;
 
+        $messages = $initialContext;
 
-        $initialContext = [
-            ['role' => 'system',
-                'content' => "Let's generate corridors for a dungeon. The dungeon is a tiny dungeon in the Fantasy setting. The dungeon type is: Ancient Ruins. The adventurers are from rank: " . $rank . ". Give only short description of the corridor. No corridor titles. No Quest details or explanations to the players. Give any stat related data in the format of the Savage Worlds SWADE RPG rules. Give only one room at a time."]
-        ];
 
             if(!empty($corridors)) {
                 foreach ($corridors as $corridor) {
 
-                    $prompt = "Generate short and quick details and description for corridor. no more than 2-3 sentences";
-                    $description = $openAIService->generateChatResponse(array_merge($initialContext, [['role' => 'user', 'content' => $prompt]]), 300);
-                    $corridor->description = $description;
+                    $prompt =
+                        $jsonInstructions['corridor']['prompt']
+                    . $jsonInstructions['initalInstructions']
+                    . $jsonInstructions['corridor']['description']
+                    ;
+                    $input = ['role' => 'user', 'content' => $prompt];
+                    $nextPrompt  = $messages;
+                    $nextPrompt[] = $input;
+                    $corridorDescription = $openAIService->generateChatResponse($nextPrompt ,3000);
+                    sleep(10);
+                    logger( $corridorDescription);
+
+                    $corridor->description = $corridorDescription;
+                    $corridorData = json_decode($corridorDescription, true);
+                    logger($corridorDescription);
+                    $summary = ['role' => 'assistant',
+                        'content' => '. Corridor Summary: ' ,  $corridorData['corridor_summary']
+                    ];
+                    $messages[] = $summary;
 
                     if ($corridor->is_trapped == 1) {
-                        $prompt = "This is a trapped corridor. generate a short description of the trap with stats and effects.";
-                        $trapDescription = $openAIService->generateChatResponse(array_merge($initialContext, [['role' => 'user', 'content' => $prompt]]), 300);
+                        $prompt = "This is a trapped corridor. generate a short description of the trap with stats and effects. Savage Worlds SWADE RPG rules."
+                        . $jsonInstructions['initalInstructions']
+                        . $jsonInstructions['corridor']['trap']
+                        ;
+
+                        $input = ['role' => 'user', 'content' => $prompt];
+                        $nextPrompt  = $messages;
+                        $nextPrompt[] = $input;
+                        $trapDescription = $openAIService->generateChatResponse($nextPrompt ,3000);
+                        sleep(10);
                         $corridor->trap_description = $trapDescription;
+
                     }
 
                     $corridor->save();
