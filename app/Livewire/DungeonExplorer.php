@@ -16,7 +16,13 @@ class DungeonExplorer extends Component
     public $doors = [];
     public $exploredRooms = [];
 
-    protected $listeners = ['revealRoom', 'revealCorridor', 'revealDoor', 'openDoor'];
+    protected $listeners = ['revealRoom',
+                            'revealCorridor',
+                            'revealDoor',
+                            'openDoor',
+                            'exploreDungeon',
+                            'resetDungeon',
+                            'triggerTrap'];
 
     public function mount($dungeonId)
     {
@@ -45,6 +51,13 @@ class DungeonExplorer extends Component
         logger('Room is now explored: ' . $room->is_explored);
     }
 
+    public function triggerTrap($corridorId){
+        $corridor = DungeonCorridor::find($corridorId);
+        if ($corridor) {
+            $corridor->trap_triggered = 1;
+            $corridor->save();
+        }
+    }
     public function revealCorridor($corridorId) {
         logger('Revealing corridor: ' . $corridorId);
         $corridor = DungeonCorridor::find($corridorId);
@@ -64,6 +77,40 @@ class DungeonExplorer extends Component
         }
         logger('Door is now explored: ' . $door->is_explored);
     }
+     public function exploreDungeon() {
+
+         foreach ($this->rooms as $room) {
+             $room->is_explored = 1;
+             $room->save();
+         }
+
+         foreach ($this->corridors as $corridor) {
+             $corridor->is_explored = 1;
+             $corridor->save();
+         }
+
+         foreach ($this->doors as $door) {
+             $door->is_explored = 1;
+             $door->is_open = 1;
+             $door->save();
+         }
+     }
+     public function resetDungeon() {
+        foreach ($this->rooms as $room) {
+            $room->is_explored = 0;
+            $room->save();
+        }
+        foreach ($this->corridors as $corridor) {
+            $corridor->is_explored = 0;
+            $corridor->trap_triggered = 0;
+            $corridor->save();
+        }
+        foreach ($this->doors as $door) {
+            $door->is_explored = 0;
+            $door->is_open = 0;
+            $door->save();
+        }
+     }
 
     public function render()
     {

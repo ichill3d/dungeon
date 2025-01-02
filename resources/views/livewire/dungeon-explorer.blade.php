@@ -1,6 +1,8 @@
 <div class="dungeon-explorer" wire:ignore class="p-2">
     <button class="bg-gray-500 inline-block mr-3 p-2 text-white font-semibold" id="zoomIn">Zoom In + </button>
     <button class="bg-gray-500 inline-block mr-3 p-2 text-white font-semibold" id="zoomOut">Zoom Out -</button>
+    <button class="bg-gray-500 inline-block mr-3 p-2 text-white font-semibold ml-8" id="revealDungeon">Reveal Dungeon</button>
+    <button class="bg-gray-500 inline-block mr-3 p-2 text-white font-semibold ml-8" id="resetDungeon">Reset Dungeon</button>
     <div class="flex flex-row">
         <div id="dungeonHolder" class="w-3/4 overflow-auto " style="height: calc(100vh - 10rem)" >
             <div id="dungeonArea" class=" bg-gray-700">
@@ -15,7 +17,7 @@
                                      data-x="{{ $room->x + $j }}" data-y="{{ $room->y  + $i }}"
                                      data-room-width="{{ $room->width }}" data-room-height="{{ $room->height }}"
                                      data-is-explored="{{ $room->is_explored }}"
-                                     class="room absolute
+                                     class="room tile absolute
                              @if($room->id === $startRoomId)
                                 bg-green-500 border-green-500
                                 @endif
@@ -40,9 +42,12 @@
                     <!-- Corridors -->
                     @foreach($corridors as $corridor)
                         @foreach(json_decode($corridor->cells) as $cell)
-                            <div class="corridor absolute "
+                            <div class="corridor tile absolute "
                                  data-corridor-id="{{ $corridor->id }}"
                                  data-is-explored="{{ $corridor->is_explored }}"
+                                 @if($corridor->is_trapped === 1)
+                                     data-trap-triggered="{{ $corridor->trap_triggered }}"
+                                 @endif
                                  data-x="{{ $cell->x }}" data-y="{{ $cell->y }}"
                                  style="top: {{ $cell->y }}rem; left: {{ $cell->x }}rem; width: 1rem; height: 1rem;
                           @if($corridor->is_explored === 0)
@@ -56,7 +61,7 @@
                     <!-- Doors -->
                     @foreach($doors as $door)
                         <div data-door-id="{{ $door->id }}" data-x="{{ $door->x }}" data-y="{{ $door->y }}"
-                             class="door absolute @if($door->is_open) door-open @endif"
+                             class="door tile absolute @if($door->is_open) door-open @endif"
                              data-is-explored="{{ $door->is_explored }}"
                              style="top: {{ $door->y }}rem; left: {{ $door->x }}rem; width: 1rem; height: 1rem;
                       @if($door->is_explored === 0)
@@ -75,24 +80,53 @@
                 $roomData = json_decode($room->description);
                 @endphp
                <div style="display: none" class="object-description" data-object-type="room" data-object-id="{{ $room->id }}">
-{{--                  <pre> {{$room->description}}</pre>--}}
-                <div class="font-bold">{{ $roomData->room_name }}</div>
+                   <div>
+                       <button class="show-data">Show Data</button>
+                       <pre style="display: none"> {{$room->description}}</pre>
+                   </div>
+
+                   <div class="flex flex-row justify-between">
+                       <div class="font-bold">{{ $roomData->room_name }}</div>
+                       <button   class="zoomToObjectButton px-2 py-1 bg-green-600 text-white hover hover:bg-green-500 rounded-lg">Zoom to Room</button>
+                   </div>
+
                    <div class="mt-1">{{ $roomData->room_description }}</div>
+
+                   @if($room->type === 'puzzle')
+
+                       <div class="mt-2">
+                           <span class="font-bold">Puzzle: </span>
+                           {{ $roomData->puzzle->description }}
+                           <button class="showPuzzleSolution px-2 py-1 bg-green-600 text-white hover hover:bg-green-500 rounded-lg">Solution</button>
+                           <div class="puzzleSolution mt-2" style="display: none">
+                               <div class="mb-2">
+                                   <span class="font-bold">Solution:</span>
+                                   <div class="mb-2">{{ $roomData->puzzle->solution }}</div>
+                                   <button class="showPuzzleReward px-2 py-1 bg-green-600 text-white hover hover:bg-green-500 rounded-lg">Reward</button>
+                               </div>
+                               <div class="puzzleReward mb-2" style="display: none">
+                                   <span class="font-bold">Reward:</span>
+                                   {{ $roomData->puzzle->reward }}
+                               </div>
+                           </div>
+                       </div>
+
+                   @endif
+
                    @if($room->type === 'boss' || $room->type === 'monster')
                     <div class="bold">Monsters:</div>
-                         @if($room->type === 'boss')
-                           <div class="inline-block font-semibold"><span class="inline-block px-1">BOSS</span> {{ $roomData->boss_monster->name }}</div>
+                       @if(!empty($roomData->boss_monster))
+                           <div class="inline-block font-semibold"><span class="inline-block px-1">BOSS</span> {{ $roomData->boss_monster->name }}, </div>
                        @endif
-                            ,
-                       @if(isset($roomData->monster))
-                           <div class="inline-block">
-                               <span class="font-semibold">{{ $roomData->monster->amount }}x </span>
-                               {{ $roomData->monster->name }}
-                           </div>
+                       @if(isset($roomData->monsters))
+                           @if(is_array($roomData->monsters))
+                               @foreach($roomData->monsters as $monster)
+                                   {{ $monster->amount }} x {{ $monster->name }},
+                               @endforeach
+                           @else
+                               {{ $roomData->monsters->amount }} x {{ $roomData->monsters->name }}
+                           @endif
                        @endif
-
-
-
                    @endif
                    @if($room->type === 'boss')
                        <x-monster-stats :monster="$roomData->boss_monster" :type="'boss'"/>
@@ -112,13 +146,37 @@
                </div>
             @endforeach
             @foreach($corridors as $corridor)
+
+                    @php
+                        $corridorData = json_decode($corridor->description);
+                    @endphp
                 <div style="display: none"  class="object-description" data-object-type="corridor" data-object-id="{{ $corridor->id }}">
-                    {{ $corridor->description }}
-                <hr>
-                    is trapped: {{ $corridor->is_trapped }}<br/>
-                    @if($corridor->is_trapped === 1)
-                    {{ $corridor->trap_description }}
-                    @endif
+                    <div>
+                        <button class="show-data">Show Data</button>
+                        <pre style="display: none"> {{$corridor}}</pre>
+                    </div>
+
+
+                    <div class="flex flex-row justify-between">
+                        <div class="font-bold">Corridor</div>
+                        <button class="zoomToObjectButton px-2 py-1 bg-green-600 text-white hover hover:bg-green-500 rounded-lg">Zoom to Corridor</button>
+                    </div>
+
+                    <div class="mt-1">{{ $corridor->description }}</div>
+
+                    <div style="display: none" class="trap-description mt-2 p-4 bg-green-700 text-white rounded-xl">
+                        <div class="font-bold mb-1">It's a trap!</div>
+                        @if($corridor->is_trapped === 1)
+                            @php
+                                $trapData = json_decode($corridor->trap_description);
+                            @endphp
+                        {{ $trapData->description }}
+                            <div><span class="font-bold">Effects: </span> {{ $trapData->effects }}</div>
+                            <div class="italic">
+                               The trap has been triggered. You may open the door.
+                            </div>
+                        @endif
+                    </div>
                 </div>
             @endforeach
         </div>
@@ -147,12 +205,60 @@
             background-image: url('{{ asset("storage/assets/doors/door1_open.png") }}');  /* Path to your sprite image */
         }
 
+        .selected-overlay {
+            position: absolute;
+        }
+
+        .selected-overlay::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.3); /* Semi-transparent red */
+            pointer-events: none; /* Allows clicks to pass through */
+            z-index: 10; /* Ensure it’s above other content */
+        }
+
     </style>
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
 
 
+            $(".show-data").click(function(){
+                $(this).siblings("pre").slideToggle();
+            });
+
+            $(".showPuzzleSolution").click(function(){
+                $(this).siblings(".puzzleSolution").slideToggle();
+            });
+            $(".showPuzzleReward").click(function(){
+                $(this).parent().parent().find(".puzzleReward").slideToggle();
+            });
+            $("#revealDungeon").click(function(){
+                $(".room, .corridor, .door").css("display", "block").attr('data-is-explored', 1);
+                Livewire.dispatch('exploreDungeon');
+            });
+            $("#resetDungeon").click(function () {
+                $(".room, .corridor, .door").css("display", "none").attr('data-is-explored', 0);
+                $(".corridor").removeAttr('data-trap-triggered');
+                $(".door").removeClass("door-open");
+                setTimeout(function () {
+                    let startRoomId = {{ $startRoomId }};  // Pass the starting room ID
+                    showRoom(startRoomId);
+                    showAdjacentDoorsToRoom(startRoomId);
+                }, 0);
+                Livewire.dispatch('resetDungeon');
+            });
+
+
+            $(".zoomToObjectButton").click(function(){
+                let objectType = $(this).parent().parent().data('object-type');
+                let objectId = $(this).parent().parent().data('object-id');
+                zoomToObject(objectType, objectId);
+            });
             function setRandomTile() {
                 // Select all div elements with the class .sprite
                 $('.room, .corridor').each(function() {
@@ -266,17 +372,40 @@
 
 
                     });
-                    showItemDescription(objectType, objectId);
+
                 }
 
-            $(".room").click(function() {
+            function selectObject(objectType, objectId) {
+                // Remove existing overlays
+                $(".room, .corridor").removeClass('selected-overlay');
+
+                // Add overlay to the selected object
+                $("." + objectType + "[data-" + objectType + "-id='" + objectId + "']").addClass('selected-overlay');
+            }
+
+
+            $(".room").on('click', function () {
+                showItemDescription('room', $(this).data('room-id'));
+                selectObject('room', $(this).data('room-id'));
+            });
+
+            $(".room").on('dblclick', function (e) {
+                e.preventDefault(); // Prevent default double-click behavior
                 zoomToObject('room', $(this).data('room-id'));
             });
-            $(".corridor").click(function() {
+
+            $(".corridor").on('click', function () {
+                showItemDescription('corridor', $(this).data('corridor-id'));
+                selectObject('corridor', $(this).data('corridor-id'));
+            });
+
+            $(".corridor").on('dblclick', function (e) {
+                e.preventDefault();
                 zoomToObject('corridor', $(this).data('corridor-id'));
             });
 
-             // Initial zoom level (no zoom)
+
+            // Initial zoom level (no zoom)
             const zoomFactor = 0.5; // Zoom step
             const minZoom = 0.5; // Minimum zoom level
             const maxZoom = 4.5; // Maximum zoom level
@@ -322,12 +451,9 @@
 
             var startRoomId = {{ $startRoomId }};  // Pass the starting room ID
 
-            // Show the initial room
             showRoom(startRoomId);
-            // Show the adjacent doors to the initial room
             showAdjacentDoorsToRoom(startRoomId);
 
-            // Show the room by ID
             function showRoom(roomId) {
                 $('[data-room-id="' + roomId + '"]').fadeIn();  // Reveal the initial room
                 $('[data-room-id="' + roomId + '"]').attr('data-is-explored', 1);
@@ -339,8 +465,6 @@
                 Livewire.dispatch('revealCorridor', { corridorId: corridorId });
             }
 
-            // Show doors adjacent to the current room
-            // Show doors adjacent to the current room
             function showAdjacentDoorsToRoom(roomId) {
                 var roomElement = $('[data-room-id="' + roomId + '"]');
                 var roomX = roomElement.data('x');
@@ -396,9 +520,97 @@
 
             }
 
+            function triggerTrapIfAvailable(doorId) {
+
+                let doorElement = $(`.door[data-door-id='${doorId}']`);
+                let corridorId = null;
+
+                let doorX = doorElement.data('x');
+                let doorY = doorElement.data('y');
+
+                let adjacentTiles = [
+                    { x: doorX - 1, y: doorY }, // left
+                    { x: doorX + 1, y: doorY }, // right
+                    { x: doorX, y: doorY - 1 }, // top
+                    { x: doorX, y: doorY + 1 }  // bottom
+                ];
+
+                let pairs = [
+                    [adjacentTiles[0], adjacentTiles[1]],
+                    [adjacentTiles[2], adjacentTiles[3]]
+                ];
+
+                // Check pairs for a valid corridor-room match
+                pairs.forEach(pair => {
+                    let firstTile = $(`.tile[data-x='${pair[0].x}'][data-y='${pair[0].y}']`);
+                    let secondTile = $(`.tile[data-x='${pair[1].x}'][data-y='${pair[1].y}']`);
+
+                    if (
+                        firstTile.hasClass('corridor') &&
+                        firstTile.data('is-explored') === 1 &&
+                        firstTile.data('trap-triggered') !== 1 &&
+                        secondTile.hasClass('room') &&
+                        secondTile.data('is-explored') === 0
+                    ) {
+                        corridorId = firstTile.data('corridor-id');
+                    }
+                    else if (
+                        firstTile.hasClass('room') &&
+                        firstTile.data('is-explored') === 0 &&
+                        secondTile.hasClass('corridor') &&
+                        secondTile.data('is-explored') === 1 &&
+                        secondTile.data('trap-triggered') !== 1
+                    ) {
+                        corridorId = secondTile.data('corridor-id');
+                    }
+                });
+
+                // No valid corridor found
+                if (!corridorId) return false;
+
+                let $corridor = $(`.corridor[data-corridor-id='${corridorId}']`);
+
+                if($corridor.attr('data-trap-triggered')) {
+                    console.log($corridor.attr('data-trap-triggered'));
+                }
+                // Explicitly check `data-trap-triggered` value
+                if ($corridor.attr('data-trap-triggered') === 1 || !$corridor.attr('data-trap-triggered')) {
+                    return false;
+                }
+
+
+
+                // Trigger the trap for the first time
+                showItemDescription("corridor", corridorId);
+                selectObject('corridor', corridorId);
+                $(`.object-description[data-object-type='corridor'][data-object-id='${corridorId}'] .trap-description`)
+                    .fadeIn();
+
+                // Update `data` cache and attribute
+                $corridor.data('trap-triggered', 1); // Update jQuery's internal cache
+                $corridor.attr('data-trap-triggered', 1); // Ensure DOM reflects the change
+
+                Livewire.dispatch('triggerTrap', { corridorId: corridorId });
+
+                console.log('Trap successfully triggered.');
+                return true;
+            }
+
+
+
 
             $('.door').on('click', function () {
+
+
+
                 var doorId = $(this).data('door-id');
+
+                if(triggerTrapIfAvailable(doorId)) {
+                    return;
+                }
+
+
+
                 let doorX = $(this).data('x');
                 let doorY = $(this).data('y');
                 let adjacentTiles = [
@@ -428,6 +640,40 @@
 
                 });
             });
+
+            function showRevealedDoorsOnLoad() {
+                let roomIds = [];
+                let corridorIds = [];
+
+                // Collect explored room IDs
+                $(".room[data-is-explored='1']").each(function () {
+                    let roomId = $(this).data('room-id');
+                    if (!roomIds.includes(roomId)) {
+                        roomIds.push(roomId);
+                    }
+                });
+
+                // Collect explored corridor IDs
+                $(".corridor[data-is-explored='1']").each(function () {
+                    let corridorId = $(this).data('corridor-id'); // Correct attribute
+                    if (!corridorIds.includes(corridorId)) {
+                        corridorIds.push(corridorId);
+                    }
+                });
+
+                // Process rooms
+                roomIds.forEach(function (value) {
+                    showAdjacentDoorsToRoom(value);
+                });
+
+                // Process corridors
+                corridorIds.forEach(function (value) {
+                    showAdjacentDoorsToCorridor(value);
+                });
+            }
+
+            showRevealedDoorsOnLoad();
+
         });
     </script>
 

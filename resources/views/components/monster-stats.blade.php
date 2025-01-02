@@ -50,10 +50,11 @@
         @foreach ($monster->stats->Gear as $item)
             <div>
                 <span class="font-semibold">{{ $item->name }}</span>
-                <span>{{ $item->description }}</span>
+                <span>{{ $item->description_and_damage }}</span>
             </div>
             @endforeach
     </div>
+    @if(!empty($monster->stats->SpecialAbilities))
     <div class="w-full text-center text-sm border-b border-gray-400 font-semibold">SPECIAL ABILITIES</div>
     <div class="flex flex-col items-center w-full justify-between mt-2 border-b-2 border-gray-500 pb-2">
         @foreach ($monster->stats->SpecialAbilities as $ability)
@@ -63,5 +64,5 @@
             </div>
             @endforeach
     </div>
-
+   @endif
 </div>

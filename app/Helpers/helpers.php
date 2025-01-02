@@ -28,4 +28,19 @@ if (!function_exists('getNextDieType')) {
 
         return '12'; // Default to 12 if not found
     }
+
+    function isSingleMonster($input) {
+        // Convert object to array if necessary
+        if (is_object($input)) {
+            $input = (array) $input;
+        }
+
+        // Ensure $input is an array
+        if (!is_array($input)) {
+            throw new InvalidArgumentException('Input must be an array or object.');
+        }
+
+        // Check if the array is numerically indexed (multiple entries)
+        return array_keys($input) !== range(0, count($input) - 1);
+    }
 }

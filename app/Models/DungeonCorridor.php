@@ -16,6 +16,7 @@ class DungeonCorridor extends Model
     protected $fillable = [
         'dungeon_id', // Foreign key referencing the dungeon
         'cells',      // JSON column that stores the corridor cells
+        'trap_triggered'
     ];
 
     // The 'cells' column will store the JSON data, so we'll cast it to an array automatically

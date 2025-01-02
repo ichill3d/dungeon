@@ -22,6 +22,9 @@ class Dungeon extends Model
         'grid',
         'dungeon_type_id',
         'dungeon_setting_id',
+        'user_inspiration',
+        'party_rank',
+        'party_size'
     ];
 
     public function rooms()

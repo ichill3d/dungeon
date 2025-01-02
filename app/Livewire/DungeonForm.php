@@ -9,6 +9,7 @@ use App\Models\Room;
 use App\Services\OpenAIService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
+use App\Services\DungeonService;
 
 ini_set('max_execution_time', 300);  // 5 minutes
 ini_set('max_input_time', 300);      // 5 minutes
@@ -16,8 +17,10 @@ ini_set('memory_limit', '512M');     // 512MB memory
 
 class DungeonForm extends Component
 {
+    protected DungeonService $dungeonService;
     public $name = '';
     public $description = '';
+    public $userInspiration = '';
     public $dungeonTypes = []; // Store types dynamically
     public $selectedDungeonTypeId;
     public $dungeonSettingId = 1;
@@ -31,6 +34,11 @@ class DungeonForm extends Component
         'dungeonSettingId' => 'required|exists:dungeon_settings,id',
         'size' => 'required|in:tiny,small,medium,large,enormous',
     ];
+
+    public function boot(DungeonService $dungeonService)
+    {
+        $this->dungeonService = $dungeonService;
+    }
 
     // Update dungeon types based on selected setting
     public function updatedDungeonSettingId()
@@ -56,8 +64,11 @@ class DungeonForm extends Component
         $dungeon = Dungeon::create([
             'name' => $this->name,
             'description' => $this->description,
+            'user_inspiration' => $this->userInspiration,
             'dungeon_setting_id' => $this->dungeonSettingId,
             'dungeon_type_id' => $this->selectedDungeonTypeId,
+            'party_size' => 4,
+            'party_rank' => 'novice',
             'size' => $this->size,
             'width' => $dimensions['width'],
             'height' => $dimensions['height'],
@@ -98,7 +109,31 @@ class DungeonForm extends Component
         $this->determineCorridorTrapped($dungeon->id);
 
         //getObjectDescription
-        $this->getObjectDescriptions($dungeon->id);
+        //$this->getObjectDescriptions($dungeon->id);
+
+        if($dungeon->name === '') {
+            $dungeonWithSettingAndType = Dungeon::with('setting', 'type')->find($dungeon->id);
+            $dungeon->name = $this->dungeonService->generateDungeonName(
+                $dungeonWithSettingAndType->setting,
+                $dungeonWithSettingAndType->type,
+                $dungeonWithSettingAndType->user_inspiration
+            );
+            $dungeon->save();
+        }
+
+        if($dungeon->description === '') {
+            $dungeonWithSettingAndType = Dungeon::with('setting', 'type')->find($dungeon->id);
+            $dungeon->description = $this->dungeonService->generateDungeonDescription(
+                $dungeonWithSettingAndType->setting,
+                $dungeonWithSettingAndType->type,
+                $dungeonWithSettingAndType->user_inspiration
+            );
+            $dungeon->save();
+        }
+
+        $dungeonWithRooms = Dungeon::with('rooms')->find($dungeon->id);
+        $this->dungeonService->generateDungeonRooms($dungeonWithRooms);
+
 
         // Step 4: Reset the form fields
         $this->reset(['name', 'description', 'size']);
@@ -626,8 +661,21 @@ class DungeonForm extends Component
             // Assign the room type from the shuffled array
             $room->type = $roomTypes[$index];
 
+            if($room->type == 'monster') {
+                $randomValue = mt_rand(1, 100);
+                if ($randomValue <= 33) {
+                    $difficulty = 'easy';
+                } elseif ($randomValue <= 66) {
+                    $difficulty = 'medium';
+
+                } else {
+                    $difficulty = 'hard';
+                }
+                $room->combat_difficulty = $difficulty;
+            }
             // Save the room type to the database
             $room->save();
+
         });
 
         // Return the rooms with updated types

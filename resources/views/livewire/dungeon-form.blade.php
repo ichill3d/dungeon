@@ -46,6 +46,18 @@
             @error('selectedDungeonTypeId') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
         </div>
 
+        <!-- User Inspiration -->
+        <div>
+            <label class="block font-medium text-gray-700">User Inspiration</label>
+            <div class="text-sm text-gray-500">
+                Guide the dungeon generation process by providing inspiration.
+            </div>
+            <textarea wire:model="userInspiration"
+                      class="w-full mt-1 p-2 border rounded-md"
+                      placeholder="Enter user inspiration"></textarea>
+            @error('userInspiration') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+        </div>
+
 
         <!-- Dungeon Description -->
         <div>

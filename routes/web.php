@@ -17,6 +17,9 @@ Route::get('/dungeons/create', function () {
 })->name('dungeons.create');
 
 Route::get('/dungeons/show/{id}', [DungeonController::class, 'showDungeon'])->name('dungeons.show');
+Route::get('/dungeons/test',  function () {
+    return view('dungeons.test');
+})->name('dungeons.test');
 
 
 Route::get('/dungeons', function () {
